@@ -1,0 +1,13 @@
+* Info at Bug59.fst(12,22-12,23):
+  - Expected failure:
+  - Ill-typed term
+  - Subtyping check failed
+  - Expected type a got type b
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.has_type y a
+  - In context:
+      a: Type0
+      b: Type0
+      x: a
+      y: b
+

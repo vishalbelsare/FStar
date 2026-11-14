@@ -1,10 +1,9 @@
 module FStar.Math.Fermat
 
-open FStar.Mul
 open FStar.Math.Lemmas
 open FStar.Math.Euclid
 
-#set-options "--fuel 1 --ifuel 0 --z3rlimit 20"
+#set-options "--fuel 1 --ifuel 0"
 
 ///
 /// Pow
@@ -265,7 +264,16 @@ let binomial_theorem_aux a b n i =
     binomial n i * pow a (n - i) * pow b i;
   }
 
-#push-options "--fuel 2"
+(* Proved separately, in an empty context: inside [binomial_theorem] the
+   nonlinear hypotheses of the preceding calc steps make this simple step
+   brittle. *)
+val binomial_theorem_ends (a b:int) (n:nat) (s:int) : Lemma
+  (pow a n + (s + pow b n) ==
+   binomial n 0 * pow a (n - 0) * pow b 0 + (s + binomial n n * pow a (n - n) * pow b n))
+let binomial_theorem_ends a b n s =
+  binomial_0 n; binomial_n n
+
+#push-options "--fuel 2 --z3rlimit_factor 8"
 
 val binomial_theorem (a b:int) (n:nat) : Lemma
   (pow (a + b) n == sum 0 n (fun i -> binomial n i * pow a (n - i) * pow b i))
@@ -337,7 +345,7 @@ let rec binomial_theorem a b n =
       pow a n + pow b n + sum 1 (n - 1) (fun i -> binomial n i * pow a (n - i) * pow b i);
       == { }
       pow a n + (sum 1 (n - 1) (fun i -> binomial n i * pow a (n - i) * pow b i) + pow b n);
-      == { binomial_0 n; binomial_n n }
+      == { binomial_theorem_ends a b n (sum 1 (n - 1) (fun i -> binomial n i * pow a (n - i) * pow b i)) }
       binomial n 0 * pow a (n - 0) * pow b 0 +
       (sum 1 (n - 1) (fun i -> binomial n i * pow a (n - i) * pow b i) +
       binomial n n * pow a (n - n) * pow b n);
@@ -392,7 +400,7 @@ let binomial_prime p k =
       factorial_mod_prime p (p - k)
     end
 
-val freshman_aux (p:int{is_prime p}) (a b:int) (i:pos{i < p}): Lemma
+val freshman_aux (p:nat{is_prime p}) (a b:int) (i:pos{i < p}): Lemma
   ((binomial p i * pow a (p - i) * pow b i) % p == 0)
 let freshman_aux p a b i =
   calc (==) {
@@ -401,14 +409,15 @@ let freshman_aux p a b i =
     (binomial p i * (pow a (p - i) * pow b i)) % p;
     == { lemma_mod_mul_distr_l (binomial p i) (pow a (p - i) * pow b i) p }
     (binomial p i % p * (pow a (p - i) * pow b i)) % p;
-    == { binomial_prime p i }
+    == { binomial_prime p i;
+         lemma_mod_mul_distr_l (binomial p i) (pow a (p - i) * pow b i) p }
     0;
   }
 
 val freshman (p:int{is_prime p}) (a b:int) : Lemma
   (pow (a + b) p % p = (pow a p + pow b p) % p)
 let freshman p a b =
-  let f (i:nat{0 <= i /\ i <= p}) = binomial p i * pow a (p - i) * pow b i % p in
+  let unfold f (i:nat{0 <= i /\ i <= p}) = binomial p i * pow a (p - i) * pow b i % p in
   Classical.forall_intro (freshman_aux p a b);
   calc (==) {
     pow (a + b) p % p;
@@ -455,7 +464,7 @@ let rec fermat_aux p a =
       == { }
       a % p;
     }
-
+#push-options "--fuel 0 --ifuel 0 --retry 2"
 let fermat p a =
   if a % p = 0 then
     begin
@@ -473,15 +482,19 @@ let fermat p a =
       == { lemma_mod_twice a p }
       a % p;
     }
+#pop-options
 
 val mod_mult_congr_aux (p:int{is_prime p}) (a b c:int) : Lemma
   (requires (a * c) % p = (b * c) % p /\ 0 <= b /\ b <= a /\ a < p /\ c % p <> 0)
   (ensures  a = b)
+#push-options "--retry 3" // proof below is brittle
 let mod_mult_congr_aux p a b c =
   let open FStar.Math.Lemmas in
   calc (==>) {
     (a * c) % p == (b * c) % p;
     ==> { mod_add_both (a * c) (b * c) (-b * c) p }
+    (a * c + (- b * c)) % p == (b * c + (- b * c)) % p;
+    ==> {}
     (a * c - b * c) % p == (b * c - b * c) % p;
     ==> { swap_mul a c; swap_mul b c; lemma_mul_sub_distr c a b }
     (c * (a - b)) % p == (b * c - b * c) % p;
@@ -491,6 +504,7 @@ let mod_mult_congr_aux p a b c =
   let r, s = FStar.Math.Euclid.bezout_prime p (c % p) in
   FStar.Math.Euclid.euclid p (c % p) (a - b) r s;
   small_mod (a - b) p
+#pop-options
 
 let mod_mult_congr p a b c =
   let open FStar.Math.Lemmas in
@@ -511,7 +525,7 @@ let fermat_alt p a =
     ((pow (a % p) (p - 1) % p) * (a % p)) % p;
     == { lemma_mod_mul_distr_l (pow (a % p) (p - 1)) (a % p) p }
     (pow (a % p) (p - 1) * (a % p)) % p;
-    == { }
+    == { assert (pow (a % p) p == (a % p) * pow (a % p) (p - 1)) }
     pow (a % p) p % p;
     == { fermat p (a % p) }
     (a % p) % p;

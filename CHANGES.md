@@ -11,9 +11,753 @@ Guidelines for the changelog:
   possibly with details in the PR or links to sample fixes (for example, changes
   to F*'s test suite).
 
+## SMT solver
+
+  * The default Z3 version is now 5.3.0. Binary packages include this
+    version, and `.scripts/get_fstar_z3.sh` installs it for source builds.
+    Proofs may need additional hints when moving from an older solver;
+    `--z3version` can still select an installed older version explicitly.
+
+## Compilation targets
+
+  * A module can have tagged interfaces and implementations, written
+    `A-ocaml.fst`, `A-s2.qemu.fst`, `A-s3-c.fst`, ...  Tags are sets of
+    hierarchical atoms (`s2.qemu` implies `s2`).  A file sees, for each
+    module, the most specific file whose tag its own tag implies; common
+    files are the fallback.  Extraction selects files for `--target` plus a
+    language atom picked from `--codegen`.  Files whose names contain a dash
+    followed by a valid tag are now read this way.  See
+    `doc/ref/targets.md`.
+
+## Custard is the only extraction backend
+
+  * The legacy extraction pipeline (`src/extraction`: the per-module OCaml,
+    F#, plugin and krml backends, and `--codegen Extension`) has been removed.
+    All extraction now goes through Custard, the whole-program compiler
+    described in `doc/ref/custard.md`.
+
+  * `--custard_backend` is renamed to `--codegen`, which now takes `OCaml`,
+    `FSharp`, `KrmlC`, `KrmlRust`, `C` or `Plugin` (an OCaml plugin linked
+    against the compiler). `--codegen Custard` and `--codegen krml` are gone:
+    replace `--codegen Custard --custard_backend X` by `--codegen X`, and
+    `--codegen krml` by `--codegen KrmlC` (or `KrmlRust`). Every extraction
+    run needs an entry point: `--custard_main`, `--custard_entry` or
+    `--custard_entry_module`.
+
+  * Removed options: `--extract`, `--extract_module`, `--extract_namespace`,
+    `--no_extract`, `--cmi`, `--codegen-lib`, `--krmloutput`,
+    `--no_location_info`, `--use_nbe_for_extraction`. (`--read_krml_file`
+    stays, and dumps the `.krml` files Custard writes.)
+
+  * `--dep full` no longer emits rules or variables for `.ml`, `.fs` or
+    `.krml` files (`ALL_ML_FILES`, `ALL_KRML_FILES`, ...); `--dep dune` only
+    emits checking rules. Write one explicit extraction rule per program
+    instead; see `examples/hello` and `mk/test.mk`.
+
+  * The F# library (`fsharp/base`, `ulibfs`) and Pulse's `pulse2rust` are
+    removed. The F# backend still exists (`--codegen FSharp`).
+
+  * The attributes `FStar.Attributes.CNoInline` and
+    `FStar.Tactics.Effect.postprocess_for_extraction_with` are removed;
+    Custard silently ignored both (issues #4867, #4901). Use
+    `postprocess_with` (which also affects typechecking) or
+    `normalize_for_extraction` instead of `postprocess_for_extraction_with`.
+
+  * The OCaml library `fstar.lib` no longer contains OCaml extracted from
+    ulib; it holds only the hand-written realizations in `ulib/ml/app`
+    (now including `FStar_SizeT`). Custard compiles the rest of ulib into
+    each program. OCaml code that linked against an extracted ulib module
+    (e.g. `FStar_Int_Cast`, `FStar_Seq_Base`) must now be produced by Custard
+    as part of the program.
+
+  * `[@@custard_c_closure_prologue p]` now takes a single string and *copies*
+    every function the decorated definition reaches, once per distinct
+    prologue, rather than adding a prologue to the shared originals (issue
+    #4711). The copies are `static`, carry `p`, and are named after it
+    (`f__avx2` for `__attribute__((target("avx2")))`); everything else keeps
+    calling the undecorated originals. This makes CPU `target(...)` prologues
+    safe: a function reached without a runtime CPU check is never given one,
+    and seeds with different targets no longer share a callee. Drop the
+    second ("shared") argument: for CUDA, `__device__` alone is now correct.
+    Globals are no longer decorated (and error 383 is gone): a CUDA table
+    read from device code needs an explicit `[@@CPrologue "__device__"]`.
+
+  * New `[@@custard_c_closure_guard "cond"]` wraps the decorated definition
+    and the copies its closure prologue makes in `#if cond ... #endif`, so
+    code for one architecture (`target("avx2")`, intrinsics) is not compiled
+    on another. New `[@@custard_c_ifdef "cond"]` on an `assume val x : bool`
+    compiles `if x then .. else ..` to `#if cond / #else / #endif`, which is
+    how a caller guards both the call and its runtime CPU check. Direct-to-C
+    backend only; any other use of the flag is error 398.
+
+## New `Nd` effect for nondeterministic, but terminating, computations
+
+  * `Nd` (an instance of the new primitive effect `NDET`) sits strictly
+    between `Tot` and `Dv`. `Dv` relaxes `Tot` in two independent ways:
+    computations may diverge, and computations are not functions (nothing
+    relates the results of two calls). `NDET` only relaxes the second: an
+    `Nd` computation is nondeterministic, but always terminates.
+
+    ```fstar
+    assume val f : unit -> Nd int
+    let _ () : Nd unit = let x = f () in let y = f () in assert (x == y) // fails
+    let rec loop (x:int) : Nd int = loop x                               // fails: termination
+    ```
+
+    The effect lattice is now `PURE ~> NDET ~> DIV`, and `NDET ~> TAC`, so
+    `Tot` computations may be used where `Nd` is expected, and `Nd`
+    computations where `Dv` or `Tac` is expected. As for `DIV`, there is no
+    `GHOST ~> NDET` edge.
+
+  * **Top-level `Nd` definitions no longer warn.** Because `Nd` terminates,
+    `let global = f ()` really does denote a value, so it is accepted
+    silently: no warning 272 (*top-level let-bindings must be total*) and no
+    `Prims.nonempty` proof obligation. `Dv` at the top level is unchanged.
+
+    The effect is still *masked*, exactly as for `Dv`: the binding gets no
+    defining equation in the SMT encoding and is not delta-unfolded. So two
+    globals defined by the same nondeterministic expression are not provably
+    equal, which is what makes `Nd` usable for allocating global state.
+
+    ```fstar
+    assume val f : unit -> Nd int
+    let g1 = f ()
+    let g2 = f ()
+    let _ = assert (g1 == g2)  // fails, as it must
+    ```
+
+  * **`Pulse.Lib.GlobalVar.mk_gvar` is now `Nd`** (issue #4534). It used to be
+    a pure total function, so two global variables declared with the same
+    initializer were provably equal, while extraction gives each `let` its own
+    call to the initializer — enough to prove `False` about extracted code.
+
+  * **`FStar.Sealed` is now an interface to nondivergent values.**
+    `FStar.Sealed.unseal : sealed a -> Nd a` has been added: unsealing is
+    total, but nondeterministic, which is exactly what keeps it compatible
+    with `sealed_singl`. `map_seal` and `bind_seal` now take `Nd` functions
+    (`a -> Nd b` and `a -> Nd (sealed b)`), so their arguments may themselves
+    unseal.
+
+    `FStar.Tactics.unseal` (i.e. `FStar.Stubs.Tactics.Unseal.unseal`) is now
+    just `FStar.Sealed.unseal` coerced into `Tac`, and is kept for
+    compatibility; existing metaprograms need no change. New code can use
+    `FStar.Sealed.unseal` directly, in `Nd` or in any effect above it.
+
+## `new` no longer implies that a type is distinct from every other type, unless it really declares a type constructor
+
+  * **`assume new type b : int -> bool` used to prove `False`** (issue #4521).
+    `new` made the SMT encoder emit a `constructor_distinct` axiom, fixing a
+    fresh `Term_constr_id` for the declared symbol, but it could be written on
+    *any* `assume val`, including ones whose result type is not a sort. Since
+    the primitive types have inversion axioms phrased over the very same
+    `Term_constr_id`, fixing an id for `b x : bool` contradicts
+    `bool_inversion`:
+
+    ```fstar
+    assume new type b : int -> bool
+    let bad (x:int) : Lemma False = (assert (b x == true); assert (b x == false))
+    ```
+
+    and likewise for `int`, `string` and `unit` result types.
+
+    The axiom is now emitted only when the declaration really does introduce a
+    type constructor, i.e. when its result type, after normalization, is a
+    `Type u`. Writing `new` on anything else is ignored, with a new warning 363
+    (`Warning_IgnoredNewQualifier`); just drop it. Proofs that leaned on the old
+    behaviour were leaning on an inconsistency;
+    `tests/bug-reports/closed/Bug185.fst` had its `decreases` clause inferred
+    inside such a context and now states it explicitly.
+
+  * **The other things `new` controlled are now inferred from the shape of the
+    declaration, so they no longer need the qualifier.** Being rigid rather
+    than SMT-equatable during unification, and being usable as the head of a
+    match scrutinee's type, now hold for any `assume`d declaration whose result
+    type is a sort, with or without `new`.
+
+    `new` itself is *not* inferrable, and remains meaningful: an abstract type
+    in an interface,
+
+    ```fstar
+    val foo : Type0
+    val foo_eq_int : unit -> Lemma (foo == int)
+    ```
+
+    is indistinguishable from an assumed type constructor to a client, yet the
+    implementation may perfectly well define `let foo = int`. Writing `new`
+    there is rejected, since `foo` has a definition, and that is exactly the
+    side condition that makes the axiom sound.
+
+    Because `Type`-valued `assume val`s are no longer SMT-equatable, a type
+    mismatch that used to be deferred to the solver may now be reported by the
+    unifier instead; this uncovered a genuinely wrong type annotation in
+    `FStarC.Extraction.ML.Modul`. It also makes `Prims.prop` rigid, so a
+    subtyping check against it now reports a failure rather than emitting an
+    SMT guard equating it with another type.
+
+  * **The `pretype_axiom` emitted for `new` declarations is gone.** It said that
+    the type of a term determines `PreType` of that term, i.e. that
+    `x : t a /\ x : t b` implies `t a == t b` — note that `PreType` is an
+    uninterpreted function of the *value*, so this was never injectivity of
+    `t`. Nothing about an assumed type justifies it and nothing relied on it.
+    Inductives are unaffected; there the constructor ids are real datatype ids.
+
+    Changing which declarations get these axioms perturbs the solver's search,
+    so a proof sitting right at the default rlimit may now need a bigger one;
+    `FStar.UInt.shift_right_value_aux_3`,
+    `FStar.Algebra.CommMonoid.Fold.Nested` and two lemmas in
+    `Pulse.Lib.HashTable.Spec` did.
+
+## Overloading by type
+
+  * **A name may now denote several things at once, and F* uses the types at
+    the occurrence to decide which is meant.** Previously, when two modules in
+    scope defined the same name, the innermost `open` won and the other name
+    could only be reached by qualifying it.
+
+    ```fstar
+    module IntOps  let f (x:int) : int = x + 1
+    module BoolOps let f (x:bool) : bool = not x
+
+    module Client
+    open IntOps
+    open BoolOps
+    let a : int  = f 0      // IntOps.f
+    let b : bool = f true   // BoolOps.f
+    let c : int -> int = f  // IntOps.f, from the expected type alone
+    ```
+
+    Resolution filters the candidates by arity, then by the type of each
+    explicit argument, then by the expected type; it eliminates a candidate
+    only when its type definitely does not fit, comparing types by their head
+    symbol alone and allowing for the coercions F* inserts. Where the type of
+    an argument has a known head, candidates whose formal at that position also
+    has a known head are preferred over those whose formal is, say, a type
+    variable, as they are more specific. Whatever survives, the innermost is
+    taken, which is the answer scope-order resolution would have given.
+    Operators participate on the same terms, `( + )` being simply the name
+    `op_Plus`.
+
+    `--ext fstar:overload=off` restores the old behaviour.
+    `--ext fstar:overload=strict` reports error 362 wherever more than one
+    candidate survives, as a diagnostic aid.
+
+  * **The machine integer modules name their operators `+ - * / % < <= > >=`.**
+    `FStar.UInt8/16/32/64/128`, `FStar.Int8/16/32/64/128`, `FStar.SizeT` and
+    `FStar.PtrdiffT` used to export `+^`, `-^`, `*^`, `/^`, `%^`, `<^`, `<=^`,
+    `>^` and `>=^`, whose `^` existed only to avoid clashing with `Prims` and
+    with each other. Overloading removes the need for it.
+
+    To update existing code, drop the `^` from those nine operators. The old
+    spellings remain as deprecated aliases (warning 288), so code written
+    against the earlier library still checks, and a downstream project can be
+    migrated at its own pace; `--warn_error -288` silences the warning
+    meanwhile. The other `^`-suffixed operators are unchanged: the wrapping and
+    underspecified arithmetic (`+%^`, `+?^`, `-%^`, `-?^`, `*%^`, `*?^`), the
+    bitwise and shift operators (`&^`, `|^`, `^^`, `<<^`, `>>^`), and equality
+    (`=^`, `<>^`). Equality keeps its `^` because `Prims.( = )` has type
+    `#a:eqtype -> a -> a -> bool`, whose argument type is not a rigid head, so
+    the `Prims` candidate could never be eliminated.
+
+  * **`Pulse.Lib.BoundedIntegers` is gone.** It emulated the above with a
+    typeclass. Replace `open Pulse.Lib.BoundedIntegers` with an `open` of the
+    integer module you use, optionally restricted:
+
+    ```fstar
+    open FStar.SizeT { v, fits, (+), (-), ( * ), (/), (%), (<), (<=), (>), (>=) }
+    ```
+
+    Uses that were generic in the class rather than at one integer type need a
+    concrete definition instead; overloading resolves a name by type but is not
+    parametric polymorphism.
+
+## Pulse
+
+  * `x |-> y` no longer relies on `has_pts_to` instances for `erased r`,
+    `frac r` and `Seq.lseq a n` (which needed the now-removed `noinst`
+    attribute). Instead, `has_pts_to p ?r` is resolved from `p` before `y` is
+    checked, so `y : erased r` gets a `reveal` and `y : lseq a n` is accepted
+    by subtyping; and `x |-> Frac f v` is a separate overload of `( |-> )`,
+    defined in `Pulse.Class.PtsTo.FracOp` and chosen by the type of its
+    argument. Source syntax is unchanged. The class itself now lives in
+    `Pulse.Class.PtsTo.Base` (re-exported by `Pulse.Class.PtsTo`). Instances
+    of `has_pts_to` must be determined by the pointer type alone.
+
+  * A Pulse conditional whose postcondition is annotated may now also carry a
+    `requires` clause, which restricts the annotation to a part of the context:
+
+    ```
+    let mut x = 6;
+    let mut y = 7;
+    if (!x < !y)
+      requires live y
+      ensures y |-> 42
+    { y := !x + 36; }
+    ```
+
+    The `requires` is proven against the context at the conditional, and the
+    leftover frame (here `x |-> 6`) is added back to the `ensures` to form the
+    postcondition of the conditional. Without a `requires`, an `ensures` must
+    still describe the whole context, as before, so existing code is unaffected.
+    Fixes https://github.com/FStarLang/FStar/issues/4417.
+
+  * An `if` annotated with an `ensures` (with or without a `requires`) now
+    infers its effect in all cases, rather than only when its branches do not
+    need the annotation themselves. Previously, a divergent call in a branch
+    that also allocated a mutable local (or otherwise required a postcondition
+    hint) was rejected even inside a `divergent fn`. As for labeled blocks, an
+    annotation on a conditional fixes only its postcondition slprop; its effect
+    is that of the enclosing computation.
+    Fixes https://github.com/FStarLang/FStar/issues/4418.
+
+  * Each branch of a Pulse `match` is now checked under the additional
+    hypotheses that the scrutinee does *not* match any of the *preceding*
+    patterns, one hypothesis per preceding pattern, of the form
+    `squash ((match sc with | p -> true | _ -> false) == false)`. Previously
+    a branch only got the equation relating the scrutinee to its own pattern,
+    so a wildcard or variable pattern learned nothing at all about the
+    scrutinee (its own equation `sc == x` being vacuous). For instance,
+    `match n { 0 -> { ... } _ -> { assert (pure (n =!= 0)); ... } }` now
+    verifies. The new hypotheses are pushed *before* the branch's own
+    equation, which must remain the last binding in scope for
+    `Pulse.Lib.Core.match_rename_tac` to find it. This is a strict
+    strengthening of the context, so existing proofs continue to work; only
+    error messages that print the proof context change.
+
+  * Pulse now distinguishes terminating from possibly-divergent computations at
+    the type and surface-syntax level. The computation type `stt` is split into
+    `stt` (terminating, surface keyword `fn`) and `stt_div` (possibly divergent,
+    surface keyword `divergent fn`). A terminating `stt` computation lifts
+    silently into `stt_div` (via `Pulse.Lib.Core.lift_stt_div`), and divergence
+    is infectious: any computation that sequences a divergent step is itself
+    divergent.
+
+    Consequences for existing code:
+    - A `while` loop with no `decreases` measure is now a divergent computation.
+      To keep such a function terminating (a plain `fn`), add a `decreases`
+      clause to the loop, placed after the `invariant`/`ensures` clauses:
+      `while (...) invariant (...) decreases (<nat measure>) { ... }`.
+      Genuinely non-terminating loops (e.g. spin/CAS-retry loops) must instead
+      live in a function declared with `divergent fn`.
+    - A recursive `fn rec` must now prove termination with a `decreases` clause,
+      or be declared `divergent fn rec`. Concurrency primitives that block or
+      spin (e.g. `Pulse.Lib.SpinLock.acquire`, `Mutex.lock`, `Par.par`, the task
+      pool's `spawn`/`await`/`teardown_pool`) are now `divergent`, so any function
+      that uses them is divergent too.
+    - `Pulse.Lib.Par` gains `par_div`, a divergent-accepting sibling of `par`.
+    - `Pulse.Lib.Task`'s task thunks (`task_f`) are now possibly divergent
+      (`stt_div`), so `spawn`/`spawn_` can spawn divergent tasks (including
+      recursively-spawning ones). A terminating task must be lifted at the call
+      site, e.g. `spawn_ p (fun () -> lift_stt_div (f ()))`.
+
+    (The PulseCore model currently defines `stt_div = stt`; a foundational model
+    of divergence is future work.)
+
+  * A destructuring `let` may now carry attributes on the whole pattern:
+    `let [@@@inline_let] (a, b) = e;`. They are put on the binding of `e`,
+    so `inline_let` substitutes `e`, and then its components, into the body,
+    as `[@@inline_let] let (a, b) = e in ...` does in F*. Attributes written
+    on `a` or `b` are still ignored.
+    Fixes https://github.com/FStarLang/FStar/issues/4620.
+
+## Core typechecker
+
+  * Fixes https://github.com/FStarLang/FStar/issues/4401. A top-level definition
+    whose body has a non-total effect (`Div`, `ML`, etc.) is only accepted if its
+    type is provably inhabited. Previously such definitions silently eliminated
+    divergence, which was unsound: `let bad : False = loop ()` typechecked with
+    only a warning.
+
+    Concretely, `let foo : ty = e` where `e` has a divergent effect now incurs an
+    extra proof obligation `nonempty ty`. This mirrors what Lean does for
+    `partial def`. The obligation is discharged automatically for the few
+    obviously inhabited types the normalizer already recognizes (`bool`, `int`,
+    `string`, `exn`, and arrows into those). For any other type, supply a
+    witness with a top-level proof before the definition:
+
+    ```
+    let _ : nonempty (int & bool) = nonempty_intro (1, true)
+    let foo : int & bool = compute_int_and_bool ()
+    ```
+
+    The obligation is a *ground* fact, so it must be stated at exactly the type
+    F* computes. Note that a top-level definition is generalized, so for a
+    polymorphic definition the obligation is about the whole quantified type;
+    naming that type makes it easy to state the witness:
+
+    ```
+    let impossible_ty = #a:Type0 -> u:unit{False} -> Tot a
+    let _ : nonempty impossible_ty =
+      nonempty_intro #impossible_ty (fun (#a:Type0) (u:unit{False}) -> false_elim #a ())
+    val impossible : impossible_ty
+    let impossible = failwith "this won't happen"
+    ```
+
+    (Lemmas with `SMTPat (nonempty t)` are not yet useful here, since the facts
+    needed are ground and F* cannot currently register a trigger-free lemma.
+    Once it can, library patterns will discharge these obligations
+    automatically.)
+
+  * Fixes https://github.com/FStarLang/FStar/issues/4463. Normalizing a nested
+    chain of projections that are *stuck* (because the scrutinee never reduces
+    to a constructor) is no longer quadratic in the depth of the chain. The
+    normalizer reduces the scrutinee of a projector to weak head normal form
+    speculatively, and used to discard that work whenever the projection turned
+    out to be stuck, so the enclosing pass reduced the very same subterms all
+    over again; the reduced scrutinee is now kept. Two related fixes: the weak
+    head normal form is memoized in its own cell instead of evicting the memo of
+    the enclosing strong normalization (the pathology of #4394), and the config
+    it uses is cached so that memo lookups still succeed on physical equality.
+
+  * The `--ext no_prim_proj` option is removed. It was meant as an escape hatch
+    for the switch to declaration-only projectors, but since projectors no
+    longer have a definition to fall back to, all it did was make every
+    projection permanently stuck.
+
+  * `nonempty` is now a lang item and lives in `Prims`; the module
+    `FStar.Nonempty` has been removed. Replace `FStar.Nonempty.nonempty` (and
+    `nonempty_intro`/`nonempty_elim`) with the corresponding `Prims` names, and
+    drop any `open FStar.Nonempty`. Note that `Prims.nonempty` is transparent,
+    whereas `FStar.Nonempty.nonempty` was abstract.
+
+  * PR https://github.com/FStarLang/FStar/pull/4605: the `--compat_pre_core`
+    option and the `with_compat_pre_core` tactic primitive are removed. They
+    let tactics skip the Core typechecker's check of the terms they solve
+    goals with, or drop its proof obligations, which is unsound. Code that
+    relied on them must make its tactics produce terms that Core accepts,
+    e.g. by leaving their proof obligations as goals.
+
+## Syntax
+
+  * Operator names are now mangled uniformly. An operator is turned into an
+    identifier by naming each of its characters and joining the names with
+    underscores, under an `op_` prefix; there are no longer any special cases.
+    For instance `( + )` is `op_Plus` (not `op_Addition`), `( <= )` is
+    `op_Less_Equals` (not `op_LessThanOrEqual`) and `( .[] )` is
+    `op_Dot_Lbrack_Rbrack` (not `op_String_Access`). Prefix (unary) minus is now
+    the operator `( ~- )`, as in OCaml and F#, hence `op_Tilde_Minus`; the name
+    `op_Minus` now denotes binary subtraction. As in OCaml, `-x` remains the
+    usual notation for prefix minus (it is sugar for `~-x`) and is still how F*
+    prints it; only *defining* a prefix minus changes, from `let ( - ) x = ...`
+    to `let ( ~- ) x = ...`. As a consequence `Prims` (and
+    other libraries) declare their operators in operator syntax, e.g.
+    `val ( + ) : int -> int -> Tot int`, and resolution of an operator no longer
+    depends on its arity or on a table of hardwired names. Code that mentions
+    mangled names directly must be updated:
+
+    | Old                            | New                     |
+    |--------------------------------|-------------------------|
+    | `op_Addition`                  | `op_Plus`               |
+    | `op_Subtraction`               | `op_Minus`              |
+    | `op_Minus` (prefix)            | `op_Tilde_Minus`        |
+    | `op_Division`                  | `op_Slash`              |
+    | `op_Modulus`                   | `op_Percent`            |
+    | `op_Negation`                  | `not`                   |
+    | `op_AmpAmp` / `op_BarBar`      | `op_Amp_Amp` / `op_Bar_Bar` |
+    | `op_LessThan` / `op_GreaterThan` | `op_Less` / `op_Greater` |
+    | `op_LessThanOrEqual` / `op_GreaterThanOrEqual` | `op_Less_Equals` / `op_Greater_Equals` |
+    | `op_Equality` / `op_disEquality` | `op_Equals` / `op_Less_Greater` |
+    | `op_String_Access` / `op_String_Assignment` | `op_Dot_Lbrack_Rbrack` / `op_Dot_Lbrack_Rbrack_Less_Minus` |
+    | `op_Array_Access` / `op_Array_Assignment` | `op_Dot_Lparen_Rparen` / `op_Dot_Lparen_Rparen_Less_Minus` |
+    | `op_Brack_Lens_Access` / `op_Brack_Lens_Assignment` | `op_Dot_Lbrack_Bar_Bar_Rbrack` / `op_Dot_Lbrack_Bar_Bar_Rbrack_Less_Minus` |
+    | `op_Lens_Access` / `op_Lens_Assignment` | `op_Dot_Lparen_Bar_Bar_Rparen` / `op_Dot_Lparen_Bar_Bar_Rparen_Less_Minus` |
+
+  * The `introduce`/`eliminate` sugar for logical connectives no longer binds
+    names for hypotheses, and `eliminate` no longer takes a `returns` clause.
+    The eliminated hypotheses are instead available in the proof context (i.e.
+    to the SMT solver) of the proof that follows `with`. Concretely:
+
+    | Old                                          | New                              |
+    |----------------------------------------------|----------------------------------|
+    | `introduce P ==> Q with h. e`                | `introduce P ==> Q with e`       |
+    | `eliminate exists x1..xn. P returns Q with h. e` | `eliminate exists x1..xn. P with e` |
+    | `eliminate P \/ Q returns R with x. e1 and y. e2` | `eliminate P \/ Q with e1 and e2` |
+    | `eliminate P /\ Q returns R with x y. e`     | `eliminate P /\ Q with e`        |
+
+    Uses of the old syntax are reported with an error explaining the change.
+    Proofs that used the name of a hypothesis (e.g. `with pf_p. f pf_p`) must
+    pass `()` instead (e.g. `with f ()`), which the SMT solver discharges using
+    the hypothesis now in context.
+
+    The desugaring changed accordingly: `eliminate exists` now elaborates to a
+    `let` binding using `FStar.Classical.Sugar.indefinite_descriptionN`,
+    `eliminate _ \/ _` to `if FStar.Classical.Sugar.or_decide p q then e1 else e2`,
+    and `eliminate _ /\ _` to `assert (p /\ q); e`.
+
+## Tactics & Reflection
+
+  * Typeclass constraints are now resolved as soon as the arguments that are
+    not functional dependencies of the class are known, while checking an
+    application, rather than only after all arguments are checked. So in
+    `f #p #r {| c p r |} (x:p) (y:r)` with `[@@fundeps [1]]` on `c`, `r` is
+    known when `y` is checked, and coercions (e.g. `reveal`) apply to `y`.
+    Likewise, a data constructor applied at a known expected type with the
+    same head, e.g. `Frac f v` at `frac (seq t)`, has its type parameters
+    fixed by the expected type before its arguments are checked (when its
+    result type does not depend on them), so `v : erased (seq t)` is revealed.
+    `--ext compat:no_eager_tcresolve` restores the old behaviour for both.
+
+    The `FStar.Tactics.Typeclasses.noinst` attribute is removed: instance
+    search should be determined by the non-fundep arguments alone. Remove the
+    attribute together with the instances that needed it; see
+    `Pulse.Class.PtsTo` for an example.
+
+  * Typeclass resolution is now implemented natively in the typechecker
+    (`FStarC.TypeChecker.TcResolve`) instead of as a tactic. It only builds
+    the instance; the refinements it relies on are checked afterwards like
+    any other implicit. Results are cached by goal, with the functional
+    dependencies of the class erased (e.g. `has_pts_to (ref int) _`) and
+    modulo universe unification variables, so that searches through
+    hierarchies with many diamonds no longer take exponential time (#2612).
+    The cache is invalidated when an instance is added or when a variable whose
+    type is a class (a local instance) is pushed. Whether a variable is a
+    local instance is decided when it is pushed: in `fun x -> ...` where the
+    type of `x` is still unknown, `x` is not a local instance; annotate it.
+    `FStar.Tactics.Typeclasses.tcresolve` is kept and calls the new primitive
+    `tcresolve_native`.
+
+    Typeclass arguments have a new binder qualifier, reflected as `Q_TcArg`
+    in `FStar.Stubs.Reflection.V2.Data.aqualv`; they used to be reflected as
+    `Q_Meta (`tcresolve)`. Tactics that match on `Q_Meta` to recognize
+    typeclass arguments should also handle `Q_TcArg`.
+
+  * PR https://github.com/FStarLang/FStar/pull/4374 adds a new case
+    `C_MachineInt of int -> int_signedness -> int_width -> vconst` to the
+    reflected constants (`FStar.Stubs.Reflection.V2.Data.vconst`). Machine
+    integer constants (e.g. `0uy`, `1l`, `2sz`) used to be inspected as a plain
+    `C_Int`, losing their signedness and width; they are now inspected
+    faithfully, both in patterns (`Pat_Constant`) and in terms (`Tv_Const`),
+    and `pack` rebuilds the machine integer constant from them. In particular,
+    this makes Pulse preserve machine integer patterns in `match` statements.
+
+    This is a breaking change for reflection clients that match exhaustively on
+    `vconst`; such code should add a `C_MachineInt` case.
+
+  * Real literals are now parsed into an exact mantissa/exponent
+    representation as soon as they enter the syntax, instead of being kept as
+    raw strings. Two soundness bugs are fixed by this: the payload of
+    `C_Real` used to be an unvalidated string that the SMT encoder printed
+    verbatim into the query, so a crafted string could inject arbitrary
+    SMT-LIB (including `(assert false)`) into it
+    (https://github.com/FStarLang/FStar/issues/4481); and the normalizer's
+    comparison of real literals was wrong for negative reals, disagreeing with
+    the SMT solver and proving `False`
+    (https://github.com/FStarLang/FStar/issues/4486).
+
+    The payload of `FStar.Stubs.Reflection.V2.Data.C_Real` is no longer a
+    string, but a value of the new type `FStar.RealLiteral.real_literal`,
+    which is the very same type the compiler uses for real constants in
+    terms. It is a record of a `mantissa` and an `exponent`, denoting
+    `mantissa * 10^exponent`, refined to be in canonical form (see
+    `FStar.RealLiteral.canonical`), so that two literals are equal exactly
+    when they denote the same number. Use `FStar.RealLiteral.mk`,
+    `of_int` or `of_string` to build one (all of them canonicalize), and
+    `to_string` or `compare` to consume one. For example, `01.0R` and
+    `1.000R` are both inspected as `C_Real (mk 1 0)`.
+
+    This is a breaking change for reflection clients using `C_Real`.
+
+  * Integer literals are likewise now parsed into their (mathematical)
+    integer value as soon as they enter the syntax, instead of being kept as
+    raw strings. The base the literal was written in (decimal, `0x`, `0o` or
+    `0b`) is retained separately, as a value of the new type
+    `FStar.IntegerLiteral.int_base`, and is used only for pretty-printing and
+    extraction.
+
+    Accordingly, `FStar.Stubs.Reflection.V2.Data.vconst` now reads
+
+    ```
+    | C_Int        : int -> sealed int_base -> vconst
+    | C_MachineInt : int -> sealed int_base -> int_signedness -> int_width -> vconst
+    ```
+
+    The base is **sealed**: it is presentational metadata, and exposing it in
+    the logical fragment would be unsound, since `0x10` and `16` are the same
+    constant as far as the normalizer, the SMT solver and
+    `FStar.Reflection.TermEq.term_eq` are concerned. Metaprograms can still
+    read it with `FStar.Tactics.unseal`. Use `FStar.Sealed.seal Dec` when
+    building a literal.
+
+    Relatedly, the range check on machine integer literals is now performed by
+    the typechecker (`tc_constant`) rather than only during desugaring, so
+    out-of-range constants built through `pack_const` are rejected as well.
+
+    This is a breaking change for reflection clients using `C_Int` or
+    `C_MachineInt`.
+
+    Note that, since only the base is retained, the pretty-printer no longer
+    reproduces the exact spelling of a literal: leading zeros are dropped and
+    hexadecimal digits are printed in lower case (`0X1F` is printed as `0x1f`).
+
+## Effects
+
+  * A pre- or postcondition can no longer determine an implicit argument. A
+    specification is a proof obligation, not part of the identity of a
+    computation type, so the verification condition of a term is not allowed to
+    influence type inference. Concretely, given
+
+    ```fstar
+    val app (#p:(int -> prop)) ($f: (x:int -> Lemma (p x))) : Lemma (forall x. p x)
+    ```
+
+    `app (fun x -> lem x)` is now rejected with *"Failed to resolve implicit
+    argument"*, because `p` would have to be read off the lambda's proof
+    obligation. `p` must instead come from unification against a declared type,
+    or be written down:
+
+    | Rejected                     | Accepted                                    |
+    |------------------------------|---------------------------------------------|
+    | `app (fun x -> lem x)`       | `app lem`                                   |
+    |                              | `app #(fun x -> q x) (fun x -> lem x)`      |
+    |                              | `let g (x:int) : Lemma (q x) = lem x in app g` |
+    |                              | `introduce forall x. q x with lem x`        |
+
+  * Computation types are now invariant in their specification under an
+    equality constraint. Relating two computation types that occur as the
+    argument of a type application (e.g. `f (unit -> Lemma p)` and
+    `f (unit -> Lemma q)`) used to succeed whenever `p ==> q`, which made every
+    type constructor covariant in the specifications it mentions and was
+    unsound in negative positions. Ordinary subsumption -- which is what
+    accepts a merely more precise specification -- is unchanged, and so is the
+    meaning of a `$`-marked binder: it demands that the argument's *type* match
+    exactly, but its specification is still related by subsumption.
+
+  * The `GHOST ~> DIV` lift has been removed from `FStar.Pervasives`. A ghost
+    computation may only be used in a divergent (hence extracted) context when
+    its result type is non-informative, in which case it is promoted to `PURE`
+    first and reaches `DIV` through `PURE ~> DIV`. Code that relied on the old
+    edge, e.g. `let leak (x:int) : Dv int = ghost x`, is now rejected. The same
+    check is now also applied to computation subtyping, so it can no longer be
+    bypassed by an ascription.
+
+## Reflection
+
+  * `C_Eff` in the V2 computation view now carries the pre- and postcondition
+    directly, `C_Eff : universes -> name -> typ -> pre:term -> post:term ->
+    decreases:list term -> comp_view`, instead of an unconstrained
+    `eff_args : list argv`. The old shape made the assumed axiom
+    `inspect_pack_comp_inv` false, since `inspect_comp` always produced exactly
+    two explicit arguments while `pack_comp` silently discarded any others.
+    Tactics that matched on `C_Eff _ _ res [(pre,_); (post,_)] decrs` should
+    now match on `C_Eff _ _ res pre post decrs`.
+
+  * `inspect_pack_comp_inv` (and its re-export `inspect_pack_comp` in
+    `FStar.Reflection.Typing`) now has a precondition: the view must not be a
+    `C_Eff` naming `FStar.Pervasives.Lemma`. `inspect_comp` always returns a
+    `C_Lemma` for that effect, so such a view is not in the image of
+    `inspect_comp`; since both functions are primitive normalizer steps, the
+    unconditional axiom could be refuted and used to prove `False`. Code that
+    instantiates the lemma at a statically known view is unaffected; code that
+    instantiates it at an arbitrary view must now rule that case out.
+
+## SMT
+
+  * The kinding axiom for a non-total arrow type (`Typing for non-total
+    arrows`) used to be a pattern-less quantifier over the universe
+    variables occurring in the types of the arrow's free variables. Z3
+    therefore instantiated it over the cross product of every
+    `Universe`-sorted term in the context, which could account for the vast
+    majority of all quantifier instantiations in a query. The axiom is now a
+    single quantifier with a multi-pattern that determines every bound
+    variable.
+
+  * Proof hints and unsat cores have been removed. The options
+    `--use_hints`, `--use_hint_hashes`, `--record_hints`, `--hint_dir`,
+    `--hint_file`, `--hint_info`, `--reuse_hint_for` and
+    `--detail_hint_replay` no longer exist, `.hints` files are no longer
+    read or written, and F* no longer asks Z3 to produce unsat cores
+    (`(set-option :produce-unsat-cores true)` is gone, which also removes a
+    significant Z3 performance penalty). Context pruning
+    (`--ext context_pruning`) subsumes what hints used to be good for.
+
+    The `vconfig` record in `FStar.VConfig` loses its `detail_hint_replay`
+    and `reuse_hint_for` fields; metaprograms that construct a `vconfig`
+    literal must drop them.
+
+  * Verification conditions are no longer sent to Z3 as a single labelled
+    formula. F* now walks the VC *before* encoding it and replays its
+    structure into the solver: a universally quantified variable becomes a
+    `declare-fun`, the hypothesis of an implication becomes an `assert`, and
+    every leaf goal gets its own `(push) (assert (not goal)) (check-sat)
+    (pop)`. All the goals of a definition are still sent in a single round
+    trip, and only the goals that actually fail are retried at higher
+    fuel/ifuel.
+
+    Consequences:
+    - `--split_queries` is gone: splitting a query was a coarse approximation
+      of one-assertion-per-goal, which is now the default and unconditional.
+      Remove `--split_queries no|on_failure|always` from `#push-options` and
+      from command lines. Warning 349 (`Warning_SplitAndRetryQueries`) no
+      longer exists.
+    - `--detail_errors` is gone: error reporting is already per goal.
+    - `--quake` and `--retry` now apply per leaf goal rather than to the whole
+      query.
+    - Error messages and ranges are more precise, and a definition can now
+      report several independent failures at once.
+    - A failed query now reports the individual proof obligation that could
+      not be discharged, as `Failed to prove: ...`, together with the
+      variables, local definitions and hypotheses it was proved under, as
+      `In context: ...`. Both are printed in F* syntax, with the original
+      binder names.
+    - The `VC = ...` detail, which describes the whole definition rather than
+      the individual goal, is now printed only under `--query_stats`. The
+      `Env = ...` detail is gone: the context of each goal is now reported
+      directly.
+
+    Because each goal is discharged in a context that no longer contains its
+    sibling goals, a proof that relied on ground terms appearing only in a
+    sibling conjunct may need help. The usual fix is to state an intermediate
+    `assert` in the vocabulary of the goal it is meant to feed, or to spell a
+    proof out with `introduce forall ... with ...` instead of relying on
+    `Classical.forall_intro`.
+
+  * Fixes a soundness bug in the SMT encoding of local `let rec`
+    expressions. Their uninterpreted symbols now take the expressions' free
+    variables as arguments; previously, the encoding ignored the enclosing
+    environment and could equate results obtained with different captured
+    values, allowing proofs of `False`.
+
 # Version 0.9.7.0
 
-## Tactics
+## Tactics & Reflection
+  * PR https://github.com/FStarLang/FStar/pull/2785 changes the reflection syntax
+    for computation types, by removing universe field from the Total and GTotal
+    comps. It also moves the decreases clause to the general C_Eff case.
+
+    This is a breaking change for the reflection clients, but the regressions should
+    only be syntactic.
+
+  * As a better fix for Bug2635, F* now has a memoizing core typechecker for total
+    (including ghost terms that are total) terms. The unification solutions, including
+    those computed in the tactics engine, are typechecked using this core typechecker.
+
+    This is a breaking change, since the core typechecker may fail to typecheck those
+    solutions, or produce SMT guards that, for example, may need to be handled by the
+    tactics.
+
+    There are a couple of ways to maintain backward compatibility.
+
+    There is a new command line option (also settable via `#set-options` in a file)
+    `--compat_pre_core <n>` , where n is either 0, 1, or 2. Value 0 is most permissive and
+    value 2 is most strict, with the metric being how much of the core typechecker is applied.
+
+    This flag is a global setting that applies "relaxed" treatment to all the unification
+    solutions. For controlling this more locally, there is a new tactic primitive
+    `with_compat_pre_core` (see https://github.com/FStarLang/FStar/blob/master/ulib/FStar.Tactics.Builtins.fsti),
+    that applies the compat pre core setting only to the input tactic invocation.
+    See https://github.com/FStarLang/FStar/blob/master/ulib/experimental/Steel.Effect.Common.fsti
+    for an example usage.
+
+  * Pat_Dot_Term now only has an `option term` as argument, where a `Some e` indicates that
+    the dot pattern has been resolved to `e`.
+
+  * Pat_Cons, the case of constructed patterns, now takes an additional argument representing
+    the universe instantiation of the constructor.
+  
+  * The behavior of `pack` was changed to canonize arrows by flattening them in the internal
+    compiler representation (https://github.com/FStarLang/FStar/pull/2609).
+    An alternative version of `pack` called `pack_curried` which does not perform canonization,
+    thus retrieving the previous behavior was also exposed.
+
   * Mutually recursive let bindings are now supported in the reflected syntax, using the
     same constructor (`Tv_Let`) as before (https://github.com/FStarLang/FStar/pull/2291.
     Inspection of a let binding now usually looks like this:
@@ -31,6 +775,28 @@ Guidelines for the changelog:
      ...
     ```
 
+  * Bug2635, reported by Benjamin Bonneau, revealed an unsoundness in
+    the way the tactic engine was using the unifier. In some cases, it
+    would enable terms at a weaker type to be accepted as solutions
+    for a goal at a refinement type, without presenting any goals for
+    the refinement formula itself. This is now fixed by adding a phase
+    at the end of tactic evaluation that checks that any
+    as-yet-unchecked solution actually has the type of the goal. If
+    this check fails, F* reports Error 217 and suggests to use the new
+    primitive tactic
+    `gather_or_solve_explicit_guards_for_resolved_goals` which
+    collects all those refinement goals and presents them to the user
+    tactic for furhter processing.
+
+  * A new version of the tactics and reflection engine was started by
+    PR https://github.com/FStarLang/FStar/pull/2960. The new version is
+    under the `FStar.Tactics.V2` and `FStar.Reflection.V2` namespaces
+    and should be considered *experimental* and subject to change. The
+    old version is still supported, available under the corresponding V1
+    namespaces. All the old, unqualified modules point to V1, so users
+    should not need to make any change to their code to continue using
+    V1.
+
 ## Typeclass argument syntax
 
   * The syntax for a typeclass argument (a.k.a. constraint) is now `{| ... |}`
@@ -39,9 +805,120 @@ Guidelines for the changelog:
 
 ## Module system
 
+  * **Interfaces are no longer syntactically interleaved into their
+    implementations.** Previously, when checking `A.fst` in the presence of
+    `A.fsti`, F* spliced the *parsed* declarations of the interface into the
+    implementation's declaration list and rechecked everything from scratch.
+    Now `A.fsti` is a genuine dependency: it is checked (or loaded from
+    `A.fsti.checked`) first, and its *already-checked* declarations are kept in
+    the typechecking environment as an ordered to-do list. Each declaration of
+    `A.fst` discharges the matching entries; interface declarations that have no
+    counterpart in the implementation (e.g. a `let` in the interface, or
+    auto-generated projectors) are copied verbatim, without being rechecked.
+    If any entry is left over at the end of the module, F* reports an error
+    listing the declarations of the interface that the implementation does not
+    define.
+
+    The to-do list also governs *scope*: a declaration of `A.fsti` only becomes
+    visible to `A.fst` once the implementation has reached it. As before, this
+    means that `A.fst` cannot use a name that `A.fsti` declares after a `val`
+    that `A.fst` has not implemented yet. This ordering discipline is what rules
+    out circular proofs, where `A.fst` would discharge a `val` of `A.fsti` using
+    a later definition of `A.fsti` that is itself justified by that very `val`.
+    Declarations introduced by a language extension (a Pulse `fn`, say) are no
+    different from plain `val`s in this respect.
+
+    Consequences for existing code:
+    - **`open`, `include` and module abbreviations in a `.fsti` no longer scope
+      over the corresponding `.fst`.** Each file must now declare the opens it
+      uses. To update existing code, copy the `open`/`include`/`module X = ...`
+      declarations of `A.fsti` to the top of `A.fst`.
+    - Pragmas such as `#set-options` / `#push-options` in a `.fsti` no longer
+      leak into the `.fst`.
+    - An implementation is now checked against the interface by *subsumption*:
+      the two must have the same number of universe parameters and the
+      implementation's type must be a subtype of the declared one. It is no
+      longer required to be syntactically identical up to normalization.
+    - Interface declarations are elaborated exactly once, so typeclass
+      resolution, tactics and splices in a `.fsti` can no longer produce
+      different terms in `A.fsti.checked` and in `A.fst.checked`.
+    - Errors are now reported in the source order of the `.fst` (interleaving
+      used to reorder declarations).
+    - An `[@@expect_failure]` block in `A.fst` defines nothing, so it does not
+      discharge anything of `A.fsti`. Writing `[@@expect_failure] let f = ...`
+      in `A.fst` no longer admits a `val f` of `A.fsti`; the declaration is
+      still reported as unimplemented.
+    - `A.fsti.checked` is now required in order to check `A.fst`, so a build
+      produces (and must ship) checked files for interfaces.
+    - The checked-file format version was bumped; all `.checked` files must be
+      regenerated.
+
   * Friend modules (https://github.com/FStarLang/FStar/wiki/Friend-modules)
 
+  * F* no longer overwrites a `.checked` file that is already present and
+    valid. In particular, checking `M.fst` when `M` befriends some module used
+    by `M.fsti` used to rewrite an already valid `M.fsti.checked` with
+    different (though equally valid) contents, which silently invalidated every
+    module that had already been checked against it and broke parallel builds.
+    Pass `--force` to regenerate a checked file unconditionally.
+    Fixes https://github.com/FStarLang/FStar/issues/4399.
+
+  * Relatedly, when checking `M.fst` F* now loads `M.fsti.checked` instead of
+    rechecking `M.fsti`, whenever that checked file (and those of its
+    dependences) are valid.
+
+  * `--cache_checked_modules` now writes checked files only for the *files*
+    given on the command line, rather than for every file of a command-line
+    *module*. In particular `fstar.exe M.fst` no longer writes
+    `M.fsti.checked` as a side effect; only `fstar.exe M.fsti` does. This
+    guarantees that the contents of an interface's checked file never depend on
+    its implementation. Builds that need `M.fsti.checked` (any consumer of `M`
+    does) must ask for it explicitly, as the `--dep full` generated makefiles
+    already do.
+
 ## Core typechecker
+  * Auto-generated projectors (`__proj__C__item__f`) and discriminators
+    (`uu___is_C`) are now *declaration-only*: the typechecker no longer emits a
+    `let` with a `match` body for them.  They are instead reduced by a primitive
+    iota rule (in both the normalizer and NBE), axiomatized directly by the SMT
+    encoder as before, and given real code at extraction time.
+
+    Consequences:
+    - `.checked` files get substantially smaller, and projectors can no longer
+      accidentally unfold into a large `match` term during unification.
+    - Projectors/discriminators reduce exactly when a `match` would, i.e. under
+      `iota`.  In particular they are no longer sensitive to `delta_only` /
+      `delta_attr` / `delta_namespace`, and `Env.lookup_definition` returns
+      `None` for them.
+    - Passing a projector or discriminator unapplied where a first-class
+      function is expected still works, but code that relied on the projector
+      being an ordinary `let` (for instance to unfold it explicitly) may need
+      adjustment.
+    - `--ext no_prim_proj` was briefly available as an escape hatch, but it is
+      now removed: since projectors have no definition to fall back to,
+      disabling the primitive iota rule only made projections permanently
+      stuck rather than restoring the old behaviour.
+
+  * As a consequence of the above, the machinery that existed to work around
+    the cost of generating projectors is gone:
+    - `FStar.Tactics.MkProjectors` (the `mk_projs` tactic and the
+      `mk_projectors` attribute) is removed.  Types that used it no longer need
+      anything: the built-in projectors are now free.
+    - The `no_auto_projectors` and `no_auto_projectors_decls` attributes are
+      deprecated and ignored.  Remove them; projectors and discriminators are
+      always declared.
+
+  * PR https://github.com/FStarLang/FStar/pull/2760 introduces core typechecking for
+    implicits introduced for application of indexed effects combinators. This is a
+    breaking change, since indexed effects clients are subject to stricter typechecking.
+
+    See the PR description for more details.
+
+  * Cf. #2641, F* now supports only type-based reasoning of reification of indexed
+    effects. See https://github.com/FStarLang/FStar/issues/2641 for more discussions
+    and associated pull request. This may be a breaking change for clients relying on
+    extraction/smt reasoning of indexed effects via reification.
+
   * F* now supports accessibility predicates based termination proofs. When writing a recursive function
 
     ```
@@ -201,6 +1078,80 @@ Guidelines for the changelog:
      provided (using UInt128).
 
 ## Syntax
+   * PR #2812 allows defining variants whose constructors carry
+     records, for example:
+     ```fstar
+     type foo = | A
+                | B { x: int; y: int }
+     ```
+
+     See `examples/misc/VariantsWithRecords.fst` for more examples.
+
+   * PR #2727 allows for custom unicode operators. As long as a
+     character belongs to the ["Math Symbol" unicode
+     category](https://www.compart.com/unicode/category/sm), it is
+     seen as a right-associative binary operator. Example:
+	 ```fstar
+	 let ( ∈ ) = List.Tot.memP
+	 let _ = assert_norm (3 ∈ [1;2;3;4])
+	 ```
+	 
+	 See `tests/micro-benchmarks/UnicodeOperators.fst` for more
+     examples.
+    
+   * PR #2745 adds support for `if` operators: the syntax `if* a then
+     ...` (with `*` an operator) is now accepted and desugared as
+     `let* [c] = a in if [c] then ...`.
+
+   * PR #2671 allows operators as field names in record expressions
+     and record type declaration. Example:
+
+	 ```fstar
+	 type foo = { ( ^ ): int  }
+	 let _: foo = { ( ^ ) = 3 }
+	 ```
+
+	 See `tests/micro-benchmarks/RecordFieldOperator.fst` for details.
+
+   * PR #2670 makes F*'s parser accept unparenthesised record
+     expressions on function application. `f {x = 1}` is now legal
+     F\*, while before one was forced to write `f ({x = 1})`.
+
+	   Note that in the context of a (possible) refinement, this is not
+     allowed since it is a parser conflict.
+
+   * PR #2669 allows name quotes in patterns, i.e. ``%`foo`` is a
+     valid pattern and is desugared to the constant string
+     pattern `"X.Y.Z.foo"`, with `X.Y.Z` being `foo`'s module.
+
+   * PR #2686 forbids the sequence `//` in operators. For instance,
+     `+//` used to be a legal operator, it is not the case anymore,
+     since it is ambiguous with the comment syntax.
+
+   * PR #2644 introduces monadic let operators in the surface
+     syntax. One can now write:
+
+	 ```
+	 let (let?) (x: option 'a) (f: 'a -> option 'b): option 'b
+       = match x with
+       | Some x -> f x
+       | None   -> None
+
+     let foo (x: option (int * option int)) =
+	    let? (a, b) = x in
+		match? b with
+		...
+	 ```
+
+     Where `?` is any operator sequence; there is also support for
+     `and?`, `;?`, etc. See [example module
+     `MonadicLetBindings`](./examples/misc/MonadicLetBindings.fst) for
+     more details.
+
+   * PR #2603 introduces universes in the reflection syntax.
+     It is a potentially breaking change for reflection clients.
+     See the PR for more description.
+
 
    * `as` is a keyword now. One use of it is to (optionally) name the
      scrutinee in dependent pattern matching, e.g.:
@@ -409,6 +1360,10 @@ Guidelines for the changelog:
      expected output location, we raise Warning 321.
 
 ## Command line options
+   * F* no longer supports the vcgen.optimize_bind_as_seq command line
+			  option for tweaking the verification condition generation.
+					The option was not on by-default, and hence was not maintained well.
+					Further, as issue #2868 observed, it relied on a strange SMT axiom.
 
    * [Issue #2385](https://github.com/FStarLang/FStar/issues/2385).
      The behavior of the --extract option was changed so that it no
@@ -428,6 +1383,14 @@ Guidelines for the changelog:
      which to enable profiling. The output of F* on its finished
      message changed to not print the time it took to verify a module.
 
+   * [PR #2776](https://github.com/FStarLang/FStar/pull/2776): The
+     `--split_queries` option now takes an argument, one of `no`,
+     `on_failure` and `always`. The default is `on_failure`, with
+     the same behavior as previously (split a query and retry when
+     the SMT solver does not return a helpful error). Using
+     `--split_queries always` mimics the old `--split_queries`,
+     splitting all queries eagerly. Using `--split_queries no` disables
+     splitting altogether.
 
 ## Editors
 
@@ -586,7 +1549,7 @@ Date:   Mon Apr 30 16:57:21 2018 -0700
   We now restrict implicit generalization to variables whose type is a
   closed refinement of `Type`, e.g.,
     `let id x = x` has the same type as before;
-    `let eq = op_Equality` has the type `#a:eqtype -> a -> a -> bool`;
+    `let eq = op_Equals` has the type `#a:eqtype -> a -> a -> bool`;
      etc.
 
   This restriction is a breaking change. For a sampling of the changes
@@ -714,7 +1677,7 @@ Date:   Mon Apr 30 16:57:21 2018 -0700
   abstract alias for a 21 bit integer represented within a
   FStar.UInt32.t.
 
-* ucontrib/Platform/fst/*: These modules are deprecated. Their
+* contrib/Platform/fst/*: These modules are deprecated. Their
   functionality is now moved to FStar.Bytes, FStar.Error, FStar.Tcp,
   FStar.Udp, and FStar.Date.
 

@@ -1,23 +1,19 @@
 module LatticeEff
 
-open FStar.Tactics
+open FStar.Tactics.V2
 open FStar.List.Tot
-open FStar.All
-module H = FStar.Heap
+open SimpleHeap
 
-#set-options "--print_universes --print_implicits --print_effect_args"
+(* This example used to layer a labelled exception/state effect over ALL_h.
+   The effect declaration and WP index are gone; the labelled heap/exception
+   monad is written directly. *)
 
-// GM: Force a type equality by SMT
 let coerce #a #b (x:a{a == b}) : b = x
 
 let unreachable #a () : Pure a (requires False) (ensures (fun _ -> False)) = coerce "whatever"
 
 type eff_label =
-  // GM: Can we do this one? ALL's WPs are unary and this is a
-  // relational property.
-  // | RD
   | WR
-  //| DIV
   | EXN
 
 type annot = eff_label -> bool
@@ -25,37 +21,23 @@ type annot = eff_label -> bool
 let interp (l : list eff_label) : annot =
   fun lab -> mem lab l
   
-type state = H.heap
-type wp a = all_wp_h H.heap a
+type state = heap
 
-// boring, exponential
-//let wpof1 #a (l : list eff_label) : all_wp_h H.heap a =
-//  let i = interp l in
-//  match i ST, i EXN with
-//  | false, false ->
-//    fun p s0 -> forall x. p (V x) s0
-//  | true , false ->
-//    fun p s0 -> forall x s1. p (V x) s1
-//  | false, true ->
-//    fun p s0 -> forall r. p r s0
-//  | true,  true ->
-//    fun p s0 -> forall r s1. p r s1
+noeq type result (a:Type) =
+  | V : v:a -> result a
+  | E : e:exn -> result a
 
-(* more generic *)
-let wpof2 #a (l : list eff_label) : wp a =
-  let i = interp l in
-  let wp : wp a = fun p s0 ->
-    (forall r s1.
-       (i WR  == false ==> s1 == s0) ==>
-       (i EXN == false ==> V? r) ==>
-       p r s1)
-  in
-  wp
+type repr0 (a:Type) : Type =
+  state -> Tot (result a & state)
 
-type repr (a:Type u#aa)
-          (labs : list u#0 eff_label) // #2074
-  : Type u#0
-  = unit -> ALL a (wpof2 labs)
+let abides #a (f : repr0 a) (ann:annot) : prop =
+    (ann WR  = false ==> (forall s0. snd (f s0) == s0))
+  /\ (ann EXN = false ==> (forall s0. V? (fst (f s0))))
+
+type repr (a:Type)
+          (labs : list eff_label)
+  : Type =
+  r:(repr0 a){abides r (interp labs)}
 
 let rec interp_at (l1 l2 : list eff_label) (l : eff_label)
   : Lemma (interp (l1@l2) l == (interp l1 l || interp l2 l))
@@ -90,128 +72,82 @@ let rec sublist_at
     | [] -> ()
     | _::l1 -> sublist_at l1 l2
 
-let ann_le (ann1 ann2 : annot) : prop =
-  forall x. ann1 x ==> ann2 x
-  
 let return (a:Type) (x:a)
-  : repr a []
-  =
-  fun () -> x
+  : repr a [] =
+  fun s0 -> (V x, s0)
+
+let return_l (#labs:list eff_label) (a:Type) (x:a)
+  : repr a labs =
+  fun s0 -> (V x, s0)
 
 let bind (a b : Type)
   (labs1 labs2 : list eff_label)
   (c : repr a labs1)
   (f : (x:a -> repr b labs2))
   : Tot (repr b (labs1@labs2))
-  = fun () -> f (c ()) ()
+  = let r = fun s0 ->
+      match c s0 with
+      | V x, s1 -> f x s1
+      | E e, s1 -> E e, s1
+    in
+    r
 
-let subcomp (a:Type)
+let (let!) #a #b #labs1 #labs2 (m : repr a labs1) (f : a -> repr b labs2)
+  : repr b (labs1@labs2)
+  = bind a b labs1 labs2 m f
+
+let weaken (a:Type)
   (labs1 labs2 : list eff_label)
   (f : repr a labs1)
   : Pure (repr a labs2)
          (requires (sublist labs1 labs2))
          (ensures (fun _ -> True))
   = f
-  
-let ite (p q r : Type0) = (p ==> q) /\ (~p ==> r)
 
-let if_then_else
-  (a : Type)
-  (labs1 labs2 : list eff_label)
-  (f : repr a labs1)
-  (g : repr a labs2)
-  (p : bool)
-  : Type
-  = repr a (labs1@labs2)
+let get_heap () : repr heap [] =
+  fun h -> (V h, h)
 
-[@@allow_informative_binders]
-total
-reifiable
-reflectable
-layered_effect {
-  EFF : a:Type -> list eff_label  -> Effect
-  with
-  repr         = repr;
-  return       = return;
-  bind         = bind;
-  subcomp      = subcomp;
-  if_then_else = if_then_else
-}
+let put_heap (h:heap) : repr unit [WR] =
+  fun _ -> (V (), h)
 
-unfold
-let pure_monotonic #a (wp : pure_wp a) : Type =
-  forall p1 p2. (forall x. p1 x ==> p2 x) ==> wp p1 ==> wp p2
+let raise (#a:Type) (e:exn) : repr a [EXN] =
+  fun h -> (E e, h)
 
-//unfold
-//let sp #a (wp : pure_wp a) : pure_post a =
-//  fun x -> ~ (wp (fun y -> ~(x == y)))
+exception Failure of string
 
-let lift_pure_eff
- (a:Type)
- (wp : pure_wp a)
- (f : eqtype_as_type unit -> PURE a wp)
- : Pure (repr a [])
-        (requires (wp (fun _ -> True) /\ pure_monotonic wp))
-        (ensures (fun _ -> True))
- = fun () -> f ()
- 
-sub_effect PURE ~> EFF = lift_pure_eff
-
-let get () : EFF H.heap [] =
-  EFF?.reflect (fun () -> get ())
-
-let (!) #a (r:ref a) : EFF a [] =
-  EFF?.reflect (fun () -> !r)
-  
-let (:=) #a (r:ref a) (v:a) : EFF unit [WR] =
-  EFF?.reflect (fun () -> r := v)
-
-(* GM: The refinement is clearly crap, just trying to get a typeable
-put-like thing here. *)
-let put (s:state{forall s1. heap_rel s1 s}) : EFF unit [WR] =
-  EFF?.reflect (fun () -> gst_put s)
-
-let raise #a (e:exn) : EFF a [EXN] =
-  EFF?.reflect (fun () -> raise e)
-
-let test0 (r:ref int) (x y : int) : EFF int [EXN] =
-  let z = !r in
-  if x + z > 0
+let test0 (x y : int) : repr int [EXN] =
+  if x + y > 0
   then raise (Failure "nope")
-  else y - z
+  else return_l #[EXN] int y
 
-let test1 (r:ref int) (x y : int) : EFF int [EXN; WR] =
-  let z = !r in
-  if x + z > 0
+let test1 (x y : int) : repr int [EXN] =
+  if x > 0
   then raise (Failure "nope")
-  else (r := 42; y - z)
-
+  else return_l #[EXN] int (y - x)
 
 let sublist_at_self (l1 : list eff_label)
   : Lemma (sublist (l1@l1) l1)
           [SMTPat (l1@l1)]
   = Classical.forall_intro (List.Tot.Properties.append_mem l1 l1)
     
-let labpoly #labs (f g : unit -> EFF int labs) : EFF int labs =
-  f () + g ()
-
-assume val try_with
-  (#a:_) (#wpf:_) (#wpg:_)
-  ($f : unit -> ALL a wpf)
-  ($g : unit -> ALL a wpg)
-  : ALL a (fun p s0 -> wpf (fun r s1 -> match r with
-                                  | V _ -> p r s1
-                                  | _ -> wpg p s1) s0)
+let labpoly #labs (f g : unit -> repr int labs) : repr int labs =
+  sublist_at_self labs;
+  weaken int (labs@labs) labs
+    (let! x = f () in
+     let! y = g () in
+     return int (x + y))
 
 (* no rollback *)
-(* GM: NB: this looks incredibly simple, but took like an hour to get right
- * when the WP of try_with wasn't exactly what was expected :-) *)
-let catch #a #labs (f : unit -> EFF a (EXN::labs)) (g : unit -> EFF a labs) : EFF a labs =
-  EFF?.reflect begin
-  fun () -> try_with (reify (f ())) (reify (g ()))
-  end
+let catch0 #a #labs (f : repr a (EXN::labs)) (g : repr a labs) : repr a labs =
+  fun h0 ->
+    match f h0 with
+    | V v, h1 -> V v, h1
+    | E _, h1 -> g h1
 
-let g #labs () : EFF int labs = 42
+let catch #a #labs (f : unit -> repr a (EXN::labs)) (g : unit -> repr a labs) : repr a labs =
+  catch0 (f ()) (g ())
 
-let test_catch (f : unit -> EFF int [EXN;WR]) : EFF int [WR] =
+let g #labs () : repr int labs = return_l #labs int 42
+
+let test_catch (f : unit -> repr int [EXN;WR]) : repr int [WR] =
   catch f g

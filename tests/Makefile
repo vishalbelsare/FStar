@@ -1,23 +1,36 @@
-FSTAR_HOME=..
-include ../examples/Makefile.include
+SUBDIRS += bug-reports
+SUBDIRS += semiring
+SUBDIRS += coercions
+SUBDIRS += error-messages
+SUBDIRS += syntax-errors
+SUBDIRS += interfaces
+SUBDIRS += tactics
+SUBDIRS += ide
+SUBDIRS += machine_integers
+SUBDIRS += floats
+SUBDIRS += micro-benchmarks
+SUBDIRS += prettyprinting
+SUBDIRS += projectors
+SUBDIRS += typeclasses
+SUBDIRS += restricted_includes
+SUBDIRS += vale
+SUBDIRS += hacl
+SUBDIRS += calc
+SUBDIRS += friends
+SUBDIRS += targets
+SUBDIRS += extraction
+SUBDIRS += custard
+SUBDIRS += overloading
 
-ALL_TEST_DIRS=\
-bug-reports \
-error-messages \
-friends \
-incl \
-ide \
-machine_integers \
-micro-benchmarks \
-prettyprinting \
-struct \
-tactics
+# These have special makefiles
+SUBDIRS_ALL += simple_hello
+SUBDIRS_CLEAN += simple_hello
+SUBDIRS_ALL += dune_hello
+SUBDIRS_CLEAN += dune_hello
+SUBDIRS_ALL += incl
+SUBDIRS_CLEAN += incl
+SUBDIRS_ALL += extension-lang
+SUBDIRS_CLEAN += extension-lang
 
-all: $(addsuffix .all, $(ALL_TEST_DIRS))
-clean: $(addsuffix .clean, $(ALL_TEST_DIRS))
-
-%.all: %
-	+$(MAKE) -C $^ all
-
-%.clean: %
-	+$(MAKE) -C $^ clean
+FSTAR_ROOT ?= ..
+include $(FSTAR_ROOT)/mk/test.mk

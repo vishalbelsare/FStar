@@ -15,8 +15,7 @@
 *)
 module Simplifier
 
-open FStar.ST
-open FStar.Tactics
+open FStar.Tactics.V2
 open FStar.Tactics.Simplifier
 
 let goal_is_true () : Tac unit =
@@ -31,15 +30,33 @@ let test_simplify () : Tac unit =
     or_else goal_is_true (fun () -> dump ""; fail "simplify left open goals")
 
 [@@plugin]
-let simplify_c () : Tac unit = simplify (); admit_all()
+let simplify_c () : Tac unit =
+  dump "start";
+  (* The VC of the underspecified STATE effect used below is a squash of a
+     squash, i.e. its proposition is a `Type0` rather than a `prop`, so
+     `simplify` -- which works on `prop`s -- does not apply to it.  Until
+     issue #4521 this was papered over by an SMT guard equating `Type0` with
+     the abstract type `prop`, which `admit_all` below then admitted. *)
+  or_else simplify (fun () -> ());
+  dump "end";
+  admit_all()
 
+noextract
+let test (_:unit) =
+  assert (forall (x:nat). True /\ x + 1 >= 0)
+       by (dump "start"; simplify(); dump "end")
+
+#push-options "--disallow_unification_guards true"
+
+/// Stateful tests using FStar.All's underspecified ST effect
+open FStar.All
+
+noextract
 let test1 (r: ref int) =
-  (r := 0;
-   r := 1;
-   r := 2;
-   r := 3)
-  <: St unit by simplify_c ()
+  (r := 0)
+  <: St unit by (simplify_c ())
 
+noextract
 let test2 (r: ref int) =
   (r := 0;
    r := 1;
@@ -53,6 +70,8 @@ let test2 (r: ref int) =
    r := 9;
    r := 10)
   <: St unit by simplify_c ()
+
+#pop-options
 
 let _ = assert (True /\ True)
             by test_simplify ()

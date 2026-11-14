@@ -1,10 +1,10 @@
 module NormMachineInteger
-open FStar.Tactics
+open FStar.Tactics.V2
 open FStar.UInt32
 
 let check_norm ()
   : Tac unit
-  = norm [delta; iota; primops];
+  = norm [delta; iota; primops; unascribe];
     let g = cur_goal () in
     match term_as_formula g with
     | Comp (Eq _) t0 t1 ->
@@ -13,5 +13,5 @@ let check_norm ()
       else fail "Not syntactically equal"
     | _ -> fail "Unexpected goal"
 
-let test = assert (1ul +^ 2ul == 3ul)
+let test = assert (1ul + 2ul == 3ul)
                by (check_norm())

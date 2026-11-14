@@ -16,8 +16,7 @@
 module __MODULE__
 
 open FStar.Tactics.CanonCommSemiring
-open FStar.Tactics
-open FStar.Mul
+open FStar.Tactics.V2
 
 // These assumptions are proven in https://github.com/project-everest/vale/blob/fstar/src/lib/math/Math.Lemmas.Int_i.fsti
 assume val modulo_addition_lemma (a:int) (n:pos) (b:int) : Lemma ((a + b * n) % n = a % n)
@@ -27,7 +26,6 @@ assume val lemma_div_mod (a:int) (n:pos) : Lemma (a == (a / n) * n + a % n)
 #reset-options "--using_facts_from '* -FStar.Tactics -CanonCommSemiring' --z3rlimit_factor __FACTOR__ --z3seed __SEED__"
 
 // To print timing
-#set-options "--hint_info"
 #set-options "--tactics_info"
 #set-options "--log_queries"
 

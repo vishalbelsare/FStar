@@ -1,0 +1,11 @@
+* Info at RewriteFail.fst(11,10-11,38):
+  - Expected failure:
+  - rewrite: could not prove equality of
+  - ‘Pulse.Lib.Reference.pts_to r 0’
+  - ‘Pulse.Lib.Reference.pts_to r 1’
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove:
+      Pulse.Lib.Reference.pts_to r 0 == Pulse.Lib.Reference.pts_to r 1
+  - In context: r: Pulse.Lib.Reference.ref Prims.int
+

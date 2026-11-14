@@ -27,13 +27,13 @@ module PropExt = FStar.PropositionalExtensionality
 (** Definition of a monoid *)
 
 let right_unitality_lemma (m:Type) (u:m) (mult:m -> m -> m) =
-  forall (x:m). x `mult` u == x
+  forall (x:m). {:pattern (x `mult` u)} x `mult` u == x
 
 let left_unitality_lemma (m:Type) (u:m) (mult:m -> m -> m) =
-  forall (x:m). u `mult` x == x
+  forall (x:m). {:pattern (u `mult` x)} u `mult` x == x
 
 let associativity_lemma (m:Type) (mult:m -> m -> m) =
-  forall (x y z:m). x `mult` y `mult` z == x `mult` (y `mult` z)
+  forall (x y z:m). {:pattern (x `mult` y `mult` z)} x `mult` y `mult` z == x `mult` (y `mult` z)
 
 unopteq
 type monoid (m:Type) =
@@ -64,7 +64,7 @@ let int_plus_monoid : monoid int =
   intro_monoid int 0 (+)
 
 (* let int_mul_monoid : monoid int = *)
-(*   intro_monoid int 1 op_Multiply *)
+(*   intro_monoid int 1 op_Star *)
 
 let conjunction_monoid : monoid prop =
   let u : prop = singleton True in

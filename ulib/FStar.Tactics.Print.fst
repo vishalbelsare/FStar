@@ -1,8 +1,19 @@
 module FStar.Tactics.Print
+open FStar.Stubs.Reflection.Types
+open FStar.Stubs.Reflection.V2.Data
 
-open FStar.Reflection
+open FStar.Reflection.V2
 open FStar.Tactics.Effect
-open FStar.Tactics.Builtins
+open FStar.Stubs.Tactics.V2.Builtins
+open FStar.Tactics.V2.Derived
+open FStar.Tactics.NamedView
+
+let namedv_view_to_string (x:Stubs.Reflection.V2.Data.namedv_view) : Tac string=
+  unseal x.ppname ^ "#" ^ string_of_int x.uniq
+
+let namedv_to_string (x:Stubs.Reflection.Types.namedv) : Tac string=
+  let x = Stubs.Reflection.V2.Builtins.inspect_namedv x in
+  namedv_view_to_string x
 
 private
 let paren (s:string) : string = "(" ^ s ^ ")"
@@ -19,21 +30,36 @@ private
 let print_list (f:'a -> Tac string) (l:list 'a) : Tac string =
    "[" ^ print_list_aux f l ^ "]"
 
+let rec universe_to_ast_string (u:universe) : Tac string =
+  match inspect_universe u with
+  | Uv_Zero -> "Uv_Zero"
+  | Uv_Succ u -> "Uv_Succ" ^ paren (universe_to_ast_string u)
+  | Uv_Max us -> "Uv_Max" ^ print_list universe_to_ast_string us
+  | Uv_BVar n -> "Uv_BVar" ^ paren (string_of_int n)
+  | Uv_Name i -> "Uv_Name" ^ paren (fst i)
+  | Uv_Unif _ -> "Uv_Unif"
+  | Uv_Unk -> "Uv_Unk"
+
+let universes_to_ast_string (us:universes) : Tac string =
+  print_list universe_to_ast_string us
+
 let rec term_to_ast_string (t:term) : Tac string =
   match inspect t with
-  | Tv_Var bv -> "Tv_Var " ^ bv_to_string bv
+  | Tv_Var bv -> "Tv_Var " ^ namedv_view_to_string bv
   | Tv_BVar bv -> "Tv_BVar " ^ bv_to_string bv
   | Tv_FVar fv -> "Tv_FVar " ^ fv_to_string fv
+  | Tv_UInst fv us ->
+    "Tv_UInst" ^ paren (fv_to_string fv ^ ", " ^ universes_to_ast_string us)
   | Tv_App hd (a, _) -> "Tv_App " ^ paren (term_to_ast_string hd ^ ", " ^ term_to_ast_string a)
   | Tv_Abs x e -> "Tv_Abs " ^ paren (binder_to_string x ^ ", " ^ term_to_ast_string e)
   | Tv_Arrow x c -> "Tv_Arrow " ^ paren (binder_to_string x ^ ", " ^ comp_to_ast_string c)
-  | Tv_Type _ -> "Type"
-  | Tv_Refine x e -> "Tv_Refine " ^ paren (bv_to_string x ^ ", " ^ term_to_ast_string e)
+  | Tv_Type u -> "Type" ^ paren (universe_to_ast_string u)
+  | Tv_Refine x e -> "Tv_Refine " ^ paren (binder_to_string x ^ ", " ^ term_to_ast_string e)
   | Tv_Const c -> const_to_ast_string c
   | Tv_Uvar i _ -> "Tv_Uvar " ^ string_of_int i
   | Tv_Let recf _ x e1 e2 ->
            "Tv_Let " ^ paren (string_of_bool recf ^ ", " ^
-                              bv_to_string x ^ ", " ^
+                              binder_to_string x ^ ", " ^
                               term_to_ast_string e1 ^ ", " ^
                               term_to_ast_string e2)
   | Tv_Match e ret_opt brs ->
@@ -47,6 +73,7 @@ let rec term_to_ast_string (t:term) : Tac string =
   | Tv_AscribedT e t _ use_eq -> "Tv_AscribedT " ^ paren (term_to_ast_string e ^ ", " ^ term_to_ast_string t ^ ", " ^ string_of_bool use_eq)
   | Tv_AscribedC e c _ use_eq -> "Tv_AscribedC " ^ paren (term_to_ast_string e ^ ", " ^ comp_to_ast_string c ^ ", " ^ string_of_bool use_eq)
   | Tv_Unknown -> "_"
+  | Tv_Unsupp -> "<Tv_Unsupp>"
 
 and match_returns_to_string (ret_opt:option match_returns_ascription) : Tac string =
   let tacopt_to_string tacopt : Tac string =
@@ -70,19 +97,27 @@ and branch_to_ast_string (b:branch) : Tac string =
   paren ("_pat, " ^ term_to_ast_string e)
 
 and comp_to_ast_string (c:comp) : Tac string =
-  match inspect_comp c with
-  | C_Total t _ -> "Tot " ^ term_to_ast_string t
-  | C_GTotal t _ -> "GTot " ^ term_to_ast_string t
-  | C_Lemma pre post _ -> "Lemma " ^ term_to_ast_string pre ^ " " ^ term_to_ast_string post
-  | C_Eff _ eff res _ -> "Effect " ^ paren (implode_qn eff ^ ", " ^ term_to_ast_string res)
+  let cv = inspect_comp c in
+  "Effect " ^ paren (implode_qn cv.effect_name ^ ", " ^ term_to_ast_string cv.result_typ)
 
 and const_to_ast_string (c:vconst) : Tac string =
   match c with
   | C_Unit -> "C_Unit"
-  | C_Int i -> "C_Int " ^ string_of_int i
+  | C_Int i _ -> "C_Int " ^ string_of_int i
+  | C_MachineInt i _ signedness width ->
+    "C_MachineInt " ^ string_of_int i ^ " " ^
+    (match signedness with | Signed -> "Signed" | Unsigned -> "Unsigned") ^ " " ^
+    (match width with
+     | Int8 -> "Int8"
+     | Int16 -> "Int16"
+     | Int32 -> "Int32"
+     | Int64 -> "Int64"
+     | Sizet -> "Sizet")
   | C_True -> "C_True"
   | C_False -> "C_False"
   | C_String s -> "C_String " ^ s
   | C_Range _ -> "C_Range _"
   | C_Reify -> "C_Reify"
   | C_Reflect name -> "C_Reflect " ^ implode_qn name
+  | C_Real r -> "C_Real \"" ^ FStar.RealLiteral.to_string r ^ "\""
+  | C_Char c -> "C_Char '" ^ String.make 1 c ^ "'"

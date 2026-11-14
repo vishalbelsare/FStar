@@ -50,9 +50,9 @@ val list_of_string_of_list (l:list char)
 /// It is not the byte length of a string
 let strlen s = List.length (list_of_string s)
 
-/// `length`, an alias for `strlen`
-unfold
-let length s = strlen s
+/// `length s` is `strlen s`, computed without building the list of
+/// characters.  Executable code should use it rather than `strlen`.
+val length (s:string) : l:nat { l = strlen s }
 
 /// `maxlen`: When applied to a literal s of less than n characters,
 /// `maxlen s n` reduces to `True` before going to the SMT solver.
@@ -75,7 +75,8 @@ val split:   list char -> string -> Tot (list string)
 /// `concat s l` concatentates the strings in `l` delimited by `s`
 val concat:  string -> list string -> Tot string
 
-/// `compare s0 s1`: lexicographic ordering on strings
+/// `compare s0 s1`: lexicographic ordering on strings.
+/// Negative if s1<s2, zero if equal, positive if s1>s2
 val compare: string -> string -> Tot int
 
 /// `lowercase`: transform each character to its lowercase variant

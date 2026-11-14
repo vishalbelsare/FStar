@@ -30,17 +30,33 @@ module FStar.ReflexiveTransitiveClosure
 ///
 /// See examples/preorder/Closure.fst for usage examples.
 
-open FStar.Preorder
+let binrel (a:Type) = a -> a -> prop
 
-val closure (#a:Type u#a) (r:relation a) : preorder a
+let predicate (a:Type u#a) = a -> prop
+
+let reflexive (#a:Type) (rel:binrel u#a a) =
+  forall (x:a). rel x x
+
+let transitive (#a:Type) (rel:binrel u#a a) =
+  forall (x:a) (y:a) (z:a). (rel x y /\ rel y z) ==> rel x z
+
+let preorder_rel (#a:Type) (rel:binrel u#a a) =
+  reflexive rel /\ transitive rel
+
+type preorder (a:Type u#a) : Type u#a = rel:binrel u#a a{preorder_rel rel}
+
+let stable (#a:Type u#a) (p:a -> prop) (rel:binrel u#a a{preorder_rel rel}) =
+  forall (x:a) (y:a). (p x /\ rel x y) ==> p y
+
+val closure (#a:Type u#a) (r:binrel u#a a) : preorder u#a a
 
 (** `closure r` includes `r` *)
-val closure_step: #a:Type u#a -> r:relation a -> x:a -> y:a
-  -> Lemma (requires r x y) (ensures closure r x y)
+val closure_step: #a:Type u#a -> r:binrel u#a a -> x:a -> y:a { r x y }
+  -> Lemma (ensures closure r x y)
     [SMTPat (closure r x y)]
 
 (** `closure r` is the smallest preorder that includes `r` *)
-val closure_inversion: #a:Type u#a -> r:relation a -> x:a -> y:a
+val closure_inversion: #a:Type u#a -> r:binrel u#a a -> x:a -> y:a
   -> Lemma (requires closure r x y)
           (ensures  x == y \/ (exists z. r x z /\ closure r z y))
 
@@ -50,6 +66,18 @@ val closure_inversion: #a:Type u#a -> r:relation a -> x:a -> y:a
 * This is useful to witness properties of monotonic references where
 * the monotonicity relation is the closure of a step relation.
 *)
-val stable_on_closure: #a:Type u#a -> r:relation a -> p:(a -> Type0)
-  -> p_stable_on_r: (squash (forall x y.{:pattern (p y); (r x y)} p x /\ r x y ==> p y))
-  -> Lemma (forall x y.{:pattern (closure r x y)} p x /\ closure r x y ==> p y)
+val stable_on_closure: #a:Type u#a -> r:binrel u#a a -> p:(a -> prop)
+  -> p_stable_on_r: (squash (forall x y.{:pattern (p y); (r x y)} p x /\ (r x y) ==> p y))
+  -> Lemma (forall x y.{:pattern (closure r x y)} p x /\ (closure r x y) ==> p y)
+
+(**
+* Induction over the reflective transitive closure of r
+*)
+val induct
+      (#a:Type) (r:binrel a) (p: a -> a -> prop)
+      (f_refl: (x:a -> squash (p x x)))
+      (f_step: (x:a -> y:a { r x y } -> squash (p x y)))
+      (f_closure: (x:a -> y:a -> z:a { p x y /\ p y z } -> squash (p x z)))
+      (x:a) (y:a) (xy:squash (closure r x y))
+: squash (p x y)
+

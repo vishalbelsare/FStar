@@ -15,7 +15,7 @@
 *)
 module FStar.Integers
 
-#set-options "--initial_ifuel 2 --max_ifuel 2 --initial_fuel 0 --max_fuel 0"
+#set-options "--ifuel 2 --fuel 0"
 
 irreducible
 let mark_for_norm = ()
@@ -151,16 +151,16 @@ let ( + ) #sw
   : Tot   (int_t sw)
   = match sw with
     | Signed Winfinite -> x + y
-    | Unsigned W8   -> FStar.UInt8.(x +^ y)
-    | Unsigned W16  -> FStar.UInt16.(x +^ y)
-    | Unsigned W32  -> FStar.UInt32.(x +^ y)
-    | Unsigned W64  -> FStar.UInt64.(x +^ y)
-    | Unsigned W128 -> FStar.UInt128.(x +^ y)
-    | Signed W8   -> FStar.Int8.(x +^ y)
-    | Signed W16  -> FStar.Int16.(x +^ y)
-    | Signed W32  -> FStar.Int32.(x +^ y)
-    | Signed W64  -> FStar.Int64.(x +^ y)
-    | Signed W128 -> FStar.Int128.(x +^ y)
+    | Unsigned W8   -> FStar.UInt8.(x + y)
+    | Unsigned W16  -> FStar.UInt16.(x + y)
+    | Unsigned W32  -> FStar.UInt32.(x + y)
+    | Unsigned W64  -> FStar.UInt64.(x + y)
+    | Unsigned W128 -> FStar.UInt128.(x + y)
+    | Signed W8   -> FStar.Int8.(x + y)
+    | Signed W16  -> FStar.Int16.(x + y)
+    | Signed W32  -> FStar.Int32.(x + y)
+    | Signed W64  -> FStar.Int64.(x + y)
+    | Signed W128 -> FStar.Int128.(x + y)
 
 [@@mark_for_norm; strict_on_arguments [0]]
 unfold
@@ -201,27 +201,27 @@ let ( +% ) (#sw:_{Unsigned? sw})
 [@@mark_for_norm; strict_on_arguments [0]]
 unfold
 noextract
-let op_Subtraction #sw
+let ( - ) #sw
                    (x:int_t sw)
                    (y:int_t sw{within_bounds sw (v x - v y)})
     : Tot          (int_t sw)
   = match sw with
     | Signed Winfinite -> x - y
-    | Unsigned W8 -> FStar.UInt8.(x -^ y)
-    | Unsigned W16 -> FStar.UInt16.(x -^ y)
-    | Unsigned W32 -> FStar.UInt32.(x -^ y)
-    | Unsigned W64 -> FStar.UInt64.(x -^ y)
-    | Unsigned W128 -> FStar.UInt128.(x -^ y)
-    | Signed W8 -> FStar.Int8.(x -^ y)
-    | Signed W16 -> FStar.Int16.(x -^ y)
-    | Signed W32 -> FStar.Int32.(x -^ y)
-    | Signed W64 -> FStar.Int64.(x -^ y)
-    | Signed W128 -> FStar.Int128.(x -^ y)
+    | Unsigned W8 -> FStar.UInt8.(x - y)
+    | Unsigned W16 -> FStar.UInt16.(x - y)
+    | Unsigned W32 -> FStar.UInt32.(x - y)
+    | Unsigned W64 -> FStar.UInt64.(x - y)
+    | Unsigned W128 -> FStar.UInt128.(x - y)
+    | Signed W8 -> FStar.Int8.(x - y)
+    | Signed W16 -> FStar.Int16.(x - y)
+    | Signed W32 -> FStar.Int32.(x - y)
+    | Signed W64 -> FStar.Int64.(x - y)
+    | Signed W128 -> FStar.Int128.(x - y)
 
 [@@mark_for_norm; strict_on_arguments [0]]
 unfold
 noextract
-let op_Subtraction_Question
+let ( -? )
         (#sw:_{Unsigned? sw})
         (x:int_t sw)
         (y:int_t sw)
@@ -237,7 +237,7 @@ let op_Subtraction_Question
 [@@mark_for_norm; strict_on_arguments [0]]
 unfold
 noextract
-let op_Subtraction_Percent
+let ( -% )
          (#sw:_{Unsigned? sw})
          (x:int_t sw)
          (y:int_t sw)
@@ -253,20 +253,19 @@ let op_Subtraction_Percent
 [@@mark_for_norm; strict_on_arguments [0]]
 unfold
 noextract
-let op_Minus
+let ( ~- )
          (#sw:_{Signed? sw})
          (x:int_t sw{within_bounds sw (0 - v x)})
   : Tot  (int_t sw)
   = let Signed w = sw in
     match w with
     | Winfinite -> 0 - x
-    | W8 -> FStar.Int8.(0y -^ x)
-    | W16 -> FStar.Int16.(0s -^ x)
-    | W32 -> FStar.Int32.(0l -^ x)
-    | W64 -> FStar.Int64.(0L -^ x)
-    | W128 -> FStar.Int128.(int_to_t 0 -^ x)
+    | W8 -> FStar.Int8.(0y - x)
+    | W16 -> FStar.Int16.(0s - x)
+    | W32 -> FStar.Int32.(0l - x)
+    | W64 -> FStar.Int64.(0L - x)
+    | W128 -> FStar.Int128.(int_to_t 0 - x)
 
-open FStar.Mul
 [@@mark_for_norm; strict_on_arguments [0]]
 unfold
 noextract
@@ -276,15 +275,15 @@ let ( * ) (#sw:signed_width{width_of_sw sw <> W128})
   : Tot   (int_t sw)
   = match sw with
     | Signed Winfinite -> x * y
-    | Unsigned W8 -> FStar.UInt8.(x *^ y)
-    | Unsigned W16 -> FStar.UInt16.(x *^ y)
-    | Unsigned W32 -> FStar.UInt32.(x *^ y)
-    | Unsigned W64 -> FStar.UInt64.(x *^ y)
-    | Signed W8 -> FStar.Int8.(x *^ y)
-    | Signed W16 -> FStar.Int16.(x *^ y)
-    | Signed W32 -> FStar.Int32.(x *^ y)
-    | Signed W64 -> FStar.Int64.(x *^ y)
-    | Signed W128 -> FStar.Int128.(x *^ y)
+    | Unsigned W8 -> FStar.UInt8.(x * y)
+    | Unsigned W16 -> FStar.UInt16.(x * y)
+    | Unsigned W32 -> FStar.UInt32.(x * y)
+    | Unsigned W64 -> FStar.UInt64.(x * y)
+    | Signed W8 -> FStar.Int8.(x * y)
+    | Signed W16 -> FStar.Int16.(x * y)
+    | Signed W32 -> FStar.Int32.(x * y)
+    | Signed W64 -> FStar.Int64.(x * y)
+    | Signed W128 -> FStar.Int128.(x * y)
 
 [@@mark_for_norm; strict_on_arguments [0]]
 unfold
@@ -320,16 +319,16 @@ noextract
 let ( > ) #sw (x:int_t sw) (y:int_t sw) : bool =
     match sw with
     | Signed Winfinite -> x > y
-    | Unsigned W8 -> FStar.UInt8.(x >^ y)
-    | Unsigned W16 -> FStar.UInt16.(x >^ y)
-    | Unsigned W32 -> FStar.UInt32.(x >^ y)
-    | Unsigned W64 -> FStar.UInt64.(x >^ y)
-    | Unsigned W128 -> FStar.UInt128.(x >^ y)
-    | Signed W8 -> FStar.Int8.(x >^ y)
-    | Signed W16 -> FStar.Int16.(x >^ y)
-    | Signed W32 -> FStar.Int32.(x >^ y)
-    | Signed W64 -> FStar.Int64.(x >^ y)
-    | Signed W128 -> FStar.Int128.(x >^ y)
+    | Unsigned W8 -> FStar.UInt8.(x > y)
+    | Unsigned W16 -> FStar.UInt16.(x > y)
+    | Unsigned W32 -> FStar.UInt32.(x > y)
+    | Unsigned W64 -> FStar.UInt64.(x > y)
+    | Unsigned W128 -> FStar.UInt128.(x > y)
+    | Signed W8 -> FStar.Int8.(x > y)
+    | Signed W16 -> FStar.Int16.(x > y)
+    | Signed W32 -> FStar.Int32.(x > y)
+    | Signed W64 -> FStar.Int64.(x > y)
+    | Signed W128 -> FStar.Int128.(x > y)
 
 [@@mark_for_norm; strict_on_arguments [0]]
 unfold
@@ -337,16 +336,16 @@ noextract
 let ( >= ) #sw (x:int_t sw) (y:int_t sw) : bool =
     match sw with
     | Signed Winfinite -> x >= y
-    | Unsigned W8 -> FStar.UInt8.(x >=^ y)
-    | Unsigned W16 -> FStar.UInt16.(x >=^ y)
-    | Unsigned W32 -> FStar.UInt32.(x >=^ y)
-    | Unsigned W64 -> FStar.UInt64.(x >=^ y)
-    | Unsigned W128 -> FStar.UInt128.(x >=^ y)
-    | Signed W8 -> FStar.Int8.(x >=^ y)
-    | Signed W16 -> FStar.Int16.(x >=^ y)
-    | Signed W32 -> FStar.Int32.(x >=^ y)
-    | Signed W64 -> FStar.Int64.(x >=^ y)
-    | Signed W128 -> FStar.Int128.(x >=^ y)
+    | Unsigned W8 -> FStar.UInt8.(x >= y)
+    | Unsigned W16 -> FStar.UInt16.(x >= y)
+    | Unsigned W32 -> FStar.UInt32.(x >= y)
+    | Unsigned W64 -> FStar.UInt64.(x >= y)
+    | Unsigned W128 -> FStar.UInt128.(x >= y)
+    | Signed W8 -> FStar.Int8.(x >= y)
+    | Signed W16 -> FStar.Int16.(x >= y)
+    | Signed W32 -> FStar.Int32.(x >= y)
+    | Signed W64 -> FStar.Int64.(x >= y)
+    | Signed W128 -> FStar.Int128.(x >= y)
 
 
 [@@mark_for_norm; strict_on_arguments [0]]
@@ -355,16 +354,16 @@ noextract
 let ( < ) #sw (x:int_t sw) (y:int_t sw) : bool =
     match sw with
     | Signed Winfinite -> x < y
-    | Unsigned W8 -> FStar.UInt8.(x <^ y)
-    | Unsigned W16 -> FStar.UInt16.(x <^ y)
-    | Unsigned W32 -> FStar.UInt32.(x <^ y)
-    | Unsigned W64 -> FStar.UInt64.(x <^ y)
-    | Unsigned W128 -> FStar.UInt128.(x <^ y)
-    | Signed W8 -> FStar.Int8.(x <^ y)
-    | Signed W16 -> FStar.Int16.(x <^ y)
-    | Signed W32 -> FStar.Int32.(x <^ y)
-    | Signed W64 -> FStar.Int64.(x <^ y)
-    | Signed W128 -> FStar.Int128.(x <^ y)
+    | Unsigned W8 -> FStar.UInt8.(x < y)
+    | Unsigned W16 -> FStar.UInt16.(x < y)
+    | Unsigned W32 -> FStar.UInt32.(x < y)
+    | Unsigned W64 -> FStar.UInt64.(x < y)
+    | Unsigned W128 -> FStar.UInt128.(x < y)
+    | Signed W8 -> FStar.Int8.(x < y)
+    | Signed W16 -> FStar.Int16.(x < y)
+    | Signed W32 -> FStar.Int32.(x < y)
+    | Signed W64 -> FStar.Int64.(x < y)
+    | Signed W128 -> FStar.Int128.(x < y)
 
 [@@mark_for_norm; strict_on_arguments [0]]
 unfold
@@ -372,16 +371,16 @@ noextract
 let ( <= ) #sw (x:int_t sw) (y:int_t sw) : bool =
     match sw with
     | Signed Winfinite -> x <= y
-    | Unsigned W8 -> FStar.UInt8.(x <=^ y)
-    | Unsigned W16 -> FStar.UInt16.(x <=^ y)
-    | Unsigned W32 -> FStar.UInt32.(x <=^ y)
-    | Unsigned W64 -> FStar.UInt64.(x <=^ y)
-    | Unsigned W128 -> FStar.UInt128.(x <=^ y)
-    | Signed W8 -> FStar.Int8.(x <=^ y)
-    | Signed W16 -> FStar.Int16.(x <=^ y)
-    | Signed W32 -> FStar.Int32.(x <=^ y)
-    | Signed W64 -> FStar.Int64.(x <=^ y)
-    | Signed W128 -> FStar.Int128.(x <=^ y)
+    | Unsigned W8 -> FStar.UInt8.(x <= y)
+    | Unsigned W16 -> FStar.UInt16.(x <= y)
+    | Unsigned W32 -> FStar.UInt32.(x <= y)
+    | Unsigned W64 -> FStar.UInt64.(x <= y)
+    | Unsigned W128 -> FStar.UInt128.(x <= y)
+    | Signed W8 -> FStar.Int8.(x <= y)
+    | Signed W16 -> FStar.Int16.(x <= y)
+    | Signed W32 -> FStar.Int32.(x <= y)
+    | Signed W64 -> FStar.Int64.(x <= y)
+    | Signed W128 -> FStar.Int128.(x <= y)
 
 [@@mark_for_norm; strict_on_arguments [0]]
 unfold
@@ -391,19 +390,19 @@ let ( / ) (#sw:signed_width{sw <> Unsigned W128})
           (y:int_t sw{0 <> (v y <: Prims.int) /\
                       (match sw with
                        | Unsigned _ -> within_bounds sw (v x / v y)
-                       | Signed _ -> within_bounds sw (v x `FStar.Int.op_Slash` v y))})
+                       | Signed _ -> within_bounds sw (v x `FStar.Int.op_Slash_Minus` v y))})
    : Tot (int_t sw)
    = match sw with
      | Signed Winfinite -> x / y
-     | Unsigned W8 -> FStar.UInt8.(x /^ y)
-     | Unsigned W16 -> FStar.UInt16.(x /^ y)
-     | Unsigned W32 -> FStar.UInt32.(x /^ y)
-     | Unsigned W64 -> FStar.UInt64.(x /^ y)
-     | Signed W8 -> FStar.Int8.(x /^ y)
-     | Signed W16 -> FStar.Int16.(x /^ y)
-     | Signed W32 -> FStar.Int32.(x /^ y)
-     | Signed W64 -> FStar.Int64.(x /^ y)
-     | Signed W128 -> FStar.Int128.(x /^ y)
+     | Unsigned W8 -> FStar.UInt8.(x / y)
+     | Unsigned W16 -> FStar.UInt16.(x / y)
+     | Unsigned W32 -> FStar.UInt32.(x / y)
+     | Unsigned W64 -> FStar.UInt64.(x / y)
+     | Signed W8 -> FStar.Int8.(x / y)
+     | Signed W16 -> FStar.Int16.(x / y)
+     | Signed W32 -> FStar.Int32.(x / y)
+     | Signed W64 -> FStar.Int64.(x / y)
+     | Signed W128 -> FStar.Int128.(x / y)
 
 [@@mark_for_norm; strict_on_arguments [0]]
 unfold
@@ -415,19 +414,19 @@ let ( % ) (#sw:signed_width{sw <> Unsigned W128})
                        | Unsigned _ -> within_bounds sw (FStar.UInt.mod #(nat_of_fixed_width (width_of_sw sw)) (v x) (v y))
                        | Signed Winfinite -> True
                        | Signed _ -> within_bounds sw (FStar.Int.mod #(nat_of_fixed_width (width_of_sw sw)) (v x) (v y))) /\
-                       within_bounds sw (FStar.Int.op_Slash (v x) (v y))})
+                       within_bounds sw (FStar.Int.op_Slash_Minus (v x) (v y))})
    : Tot (int_t sw)
    = match sw with
      | Signed Winfinite -> x % y
-     | Unsigned W8 -> FStar.UInt8.(x %^ y)
-     | Unsigned W16 -> FStar.UInt16.(x %^ y)
-     | Unsigned W32 -> FStar.UInt32.(x %^ y)
-     | Unsigned W64 -> FStar.UInt64.(x %^ y)
-     | Signed W8 -> FStar.Int8.(x %^ y)
-     | Signed W16 -> FStar.Int16.(x %^ y)
-     | Signed W32 -> FStar.Int32.(x %^ y)
-     | Signed W64 -> FStar.Int64.(x %^ y)
-     | Signed W128 -> FStar.Int128.(x %^ y)
+     | Unsigned W8 -> FStar.UInt8.(x % y)
+     | Unsigned W16 -> FStar.UInt16.(x % y)
+     | Unsigned W32 -> FStar.UInt32.(x % y)
+     | Unsigned W64 -> FStar.UInt64.(x % y)
+     | Signed W8 -> FStar.Int8.(x % y)
+     | Signed W16 -> FStar.Int16.(x % y)
+     | Signed W32 -> FStar.Int32.(x % y)
+     | Signed W64 -> FStar.Int64.(x % y)
+     | Signed W128 -> FStar.Int128.(x % y)
 
 [@@mark_for_norm; strict_on_arguments [0]]
 unfold

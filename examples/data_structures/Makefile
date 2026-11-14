@@ -1,23 +1,35 @@
-FSTAR_FILES = $(wildcard *.fst)
+FSTAR_ROOT ?= ../..
+include $(FSTAR_ROOT)/mk/test.mk
 
-all: verify-all
+HAS_OCAML ?= 1
 
-include ../Makefile.common
+ifneq (,$(HAS_OCAML))
+all: $(OUTPUT_DIR)/RBTreeIntrinsic.exe
+endif
 
-verify-all: $(CACHE_DIR) $(addsuffix .checked, $(addprefix $(CACHE_DIR)/, $(FSTAR_FILES)))
+# EXTRACT = RBTreeIntrinsic
 
-EXTRACT = RBTreeIntrinsic
+# OCAML_DEFAULT_FLAGS += -I $(OUTPUT_DIR) -w -31
 
-OCAML_DEFAULT_FLAGS += -I $(OUTPUT_DIRECTORY) -w -31
+# $(OUTPUT_DIR)/test.exe: $(OUTPUT_DIR)/$(EXTRACT).ml
+# 	@echo 'let _ = test()' >> $^
+# 	$(FSTAR_EXE) --ocamlopt $^ -o $@
 
-$(OUTPUT_DIRECTORY)/test.exe: $(OUTPUT_DIRECTORY)/$(EXTRACT).ml | $(OUTPUT_DIRECTORY)
-	@echo 'let _ = test()' >> $^
-	$(OCAMLC) -o $(OUTPUT_DIRECTORY)/test.exe $^
+%.run: $(OUTPUT_DIR)/%.exe
+	$(call msg, "RUN", $<)
+	./$<
+	touch $@
 
-test: $(OUTPUT_DIRECTORY)/test.exe
-	$(OUTPUT_DIRECTORY)/test.exe
+$(OUTPUT_DIR)/%.exe: $(OUTPUT_DIR)/%.ml
+	$(call msg, "OCAMLOPT", $<)
+	$(FSTAR_EXE) --ocamlopt $< -o $@
 
-clean:
-	rm -rf $(OUTPUT_DIRECTORY) $(CACHE_DIR) .depend
+# Section 126.  Custard is whole-program and keyed on an entry point, so the
+# program the old rule built by appending a call to the extracted module is
+# built by *naming* that call: --custard_main is the definition the generated
+# program invokes on startup.  Nothing else in the module reaches [test], and
+# under --custard_entry_module it was dead code and dropped.
 
-.PHONY: depend verify-all test clean
+$(OUTPUT_DIR)/RBTreeIntrinsic.ml: $(CACHE_DIR)/RBTreeIntrinsic.fst.checked $(FSTAR_EXE)
+	$(call msg, "EXTRACT", RBTreeIntrinsic.fst)
+	$(FSTAR) --codegen OCaml --custard_main RBTreeIntrinsic.test $< -o $@

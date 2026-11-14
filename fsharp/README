@@ -1,0 +1,6 @@
+The `tests/` subdirectory contains small F* programs that are extracted
+to F# with `--codegen FSharp`, compiled, and run.  Custard's F# backend
+emits its own support library and project, so no separate F# library is
+needed.
+
+Run `make fsharp-test` from the top level to run them.

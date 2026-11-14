@@ -1,0 +1,299 @@
+# This generic makefile is used by almost everything in examples/ and tests/.
+#
+# Most clients only need to set FSTAR_ROOT and include $(FSTAR_ROOT)/mk/test.mk (this makefile).
+#
+# This will take care of running dependency analysis and checking every file in the current directory.
+# If there are .expected files, we will try to produce the relevant file and compare it with the .expected file.
+# For instance, defining A.ml.expected in a directory with A.fst will trigger extraction of A
+# into $(OUTPUT_DIR)/A.ml and comparison with A.ml.expected.
+#
+# If your directory has subdirectories, you can define SUBDIRS to list them (a line like 'SUBDIRS += dir'
+# for each one is idiomatic). If the subdirectories use custom makefiles without all the rules here,
+# you can just add them to SUBDIRS_ALL and SUBDIRS_CLEAN.
+#
+# The 'all' rule by default just depends on __verify and the recursive 'all' rules. This
+# will check all files, check all # expected outputs, and extract/build/run the files defined
+# in EXTRACT, BUILD, RUN. You can add more functionality in a given Makefile by adding more
+# requirements to the 'all' rule.
+
+ifeq ($(FSTAR_ROOT),)
+  $(error FSTAR_ROOT is not set. Please set it to the root of your F* repository)
+endif
+include $(FSTAR_ROOT)/mk/common.mk
+.DEFAULT_GOAL := all
+
+# Set a default FSTAR_EXE for most clients.
+FSTAR_EXE ?= $(FSTAR_ROOT)/out/bin/fstar.exe
+FSTAR_EXE := $(abspath $(FSTAR_EXE))
+export FSTAR_EXE
+
+KRML_EXE ?= $(FSTAR_ROOT)/out/bin/krml
+KRML_EXE := $(abspath $(KRML_EXE))
+export KRML_EXE
+
+FSTAR_ARGS += --odir $(OUTPUT_DIR)
+FSTAR_ARGS += --cache_dir $(CACHE_DIR)
+FSTAR_ARGS += --already_cached Prims,FStar
+FSTAR_ARGS += --warn_error -321 # This warning is really useless.
+FSTAR_ARGS += $(OTHERFLAGS)
+
+# Set ADMIT=1 to admit queries
+FSTAR_ARGS += $(if $(ADMIT),--admit_smt_queries true)
+
+# Almost everything goes into the OUTPUT_DIR, except for .checked files
+# which go in the CACHE_DIR. The .depend goes in the current directory.
+# Extracted files, executables, touch files (.diff), outputs (.out), etc,
+# all go in the OUTPUT_DIR. This makes cleaning up pretty easy.
+OUTPUT_DIR ?= _output
+CACHE_DIR ?= _cache
+
+FSTAR = $(RAMON) $(FSTAR_EXE) $(SIL) 						\
+	$(FSTAR_ARGS)
+
+ifneq ($(MAKECMDGOALS),clean)
+ifeq ($(NODEPEND),) # Set NODEPEND=1 to not dependency analysis
+FSTAR_FILES ?= $(wildcard *.fst) $(wildcard *.fsti)
+FSTAR_FILES := $(strip $(FSTAR_FILES))
+
+ifneq ($(FSTAR_FILES),) # It anyway only runs if fst/fsti files are found in the cwd
+.depend: $(FSTAR_FILES)
+	$(call msg, "DEPEND", $(CURDIR))
+	$(FSTAR) --dep full $(FSTAR_FILES) -o $@
+depend: .depend
+include .depend
+endif
+
+# The extraction targets of each module M in this directory, named as F*
+# names the OCaml module (dots become underscores).  These rules only give
+# the prerequisite, so that $< in the recipes below is M's checked file;
+# a client can still override the recipe for a given target.
+define extraction_targets
+$(OUTPUT_DIR)/$(subst .,_,$(1)).ml $(OUTPUT_DIR)/$(subst .,_,$(1)).fs $(OUTPUT_DIR)/$(subst .,_,$(1)).krml $(OUTPUT_DIR)/$(1).cherry.c: $(CACHE_DIR)/$(1).fst.checked
+endef
+$(foreach f,$(filter %.fst,$(FSTAR_FILES)),$(eval $(call extraction_targets,$(basename $(notdir $(f))))))
+
+endif
+endif
+
+# These will be in the cache directory due to the .depend
+%.fst.checked:
+	$(call msg, "CHECK", $(basename $(notdir $@)))
+	$(FSTAR) -c $< -o $@
+	touch -c $@
+
+%.fsti.checked:
+	$(call msg, "CHECK", $(basename $(notdir $@)))
+	$(FSTAR) -c $< -o $@
+	touch -c $@
+
+$(OUTPUT_DIR)/%.fst.output: %.fst
+	$(call msg, "OUTPUT", $(basename $(notdir $@)))
+	@mkdir -p $(dir $@)
+	$(FSTAR) --message_format human --silent -f --print_expected_failures $< >$@ 2>&1
+
+$(OUTPUT_DIR)/%.fsti.output: %.fsti
+	$(call msg, "OUTPUT", $(basename $(notdir $@)))
+	@mkdir -p $(dir $@)
+	$(FSTAR) --message_format human --silent -f --print_expected_failures $< >$@ 2>&1
+
+$(OUTPUT_DIR)/%.fst.json_output: %.fst
+	$(call msg, "JSONOUT", $(basename $(notdir $@)))
+	@mkdir -p $(dir $@)
+	$(FSTAR) --message_format json --silent -f --print_expected_failures $< >$@ 2>&1
+
+$(OUTPUT_DIR)/%.fsti.json_output: %.fsti
+	$(call msg, "JSONOUT", $(basename $(notdir $@)))
+	@mkdir -p $(dir $@)
+	$(FSTAR) --message_format json --silent -f --print_expected_failures $< >$@ 2>&1
+
+# Extraction: --custard_entry_module M makes every top-level definition of M
+# a root and runs M's top-level effects.  The whole program lands in one
+# file, which the .exe rule compiles against the installed library.  For
+# karamel, --custard_split keeps the F* module names inside that file, so
+# that the .c rule's -bundle M=* has a module M to select.
+$(OUTPUT_DIR)/%.ml:
+	$(call msg, "EXTRACT", $(basename $(notdir $@)))
+	$(FSTAR) --codegen OCaml --custard_entry_module $(subst .fst.checked,,$(notdir $<)) $< -o $@
+
+$(OUTPUT_DIR)/%.fs:
+	$(call msg, "EXTRACT FS", $(basename $(notdir $@)))
+	$(FSTAR) --codegen FSharp \
+	  --custard_entry_module $(subst .fst.checked,,$(notdir $<)) $< -o $@
+
+$(OUTPUT_DIR)/%.krml:
+	$(call msg, "EXTRACT", $(basename $(notdir $@)))
+	$(FSTAR) --codegen KrmlC --custard_split \
+	  --custard_entry_module $(subst .fst.checked,,$(notdir $<)) $< -o $@
+
+$(OUTPUT_DIR)/%.c: $(OUTPUT_DIR)/%.krml
+	$(call msg, "KRML", $(basename $(notdir $@)))
+	if ! which $(KRML_EXE); then echo "krml ($(KRML_EXE)) not found" >&2; false; fi
+	$(KRML_EXE) $(KRML_FLAGS) -skip-makefiles -header=$(FSTAR_ROOT)/mk/krmlheader -bundle $*=* -skip-linking $+ -tmpdir $(OUTPUT_DIR)
+
+$(OUTPUT_DIR)/%.exe: $(OUTPUT_DIR)/%.ml
+	$(call msg, "OCAMLOPT", $(basename $(notdir $<)))
+	$(FSTAR_EXE) --ocamlopt $< -o $@
+
+$(OUTPUT_DIR)/%.fs-exe: $(OUTPUT_DIR)/%.fs
+	$(call msg, "FSHARPC", $(basename $(notdir $<)))
+	@test -f $*.fsproj || { echo "ERROR: $*.fsproj not found"; false; }
+	dotnet publish --nologo -v q $*.fsproj -r linux-x64 --self-contained -p:PublishSingleFile=true -o $(dir $@)
+	mv $(OUTPUT_DIR)/$* $@
+
+$(OUTPUT_DIR)/%.out: $(OUTPUT_DIR)/%.exe
+	$(call msg, "RUN", $(basename $(notdir $<)))
+	./$< > $@
+
+$(OUTPUT_DIR)/%.fs-out: $(OUTPUT_DIR)/%.fs-exe
+	$(call msg, "RUN (F#)", $(basename $(notdir $<)))
+	./$< > $@
+
+# Cherry (doc/ref/cherry.md): every RUN test is also compiled with
+# --codegen Cherry and run under ASan and UBSan, with leak checking, and its
+# output must be the OCaml executable's.  NOCHERRY=1 skips this, and
+# NO_CHERRY lists the RUN tests a directory excludes.
+CHERRY_INC = $(shell $(FSTAR_EXE) --locate_lib)/ulib/c
+CHERRY_CC ?= $(CC)
+CHERRY_CXX ?= $(CXX)
+CHERRY_CFLAGS ?= -std=c11 -g -DCHERRY_DEBUG -fsanitize=address,undefined -fno-sanitize-recover=undefined
+
+$(OUTPUT_DIR)/%.cherry.c:
+	$(call msg, "EXTRACT CHERRY", $(basename $(notdir $@)))
+	$(FSTAR) --codegen Cherry \
+	  --custard_main $(subst .fst.checked,,$(notdir $<)) $< -o $@
+
+$(OUTPUT_DIR)/%.cherry-exe: $(OUTPUT_DIR)/%.cherry.c
+	$(call msg, "CC CHERRY", $*)
+	$(CHERRY_CC) $(CHERRY_CFLAGS) -I$(CHERRY_INC) -I$(OUTPUT_DIR) \
+	  $< $(CHERRY_INC)/cherry.c -o $@
+
+$(OUTPUT_DIR)/%.cherry-out: $(OUTPUT_DIR)/%.cherry-exe $(OUTPUT_DIR)/%.out
+	$(call msg, "RUN (Cherry)", $*)
+	ASAN_OPTIONS=detect_leaks=1 ./$< > $@.tmp
+	cmp $@.tmp $(OUTPUT_DIR)/$*.out
+	mv $@.tmp $@
+
+### Checking expected output for any kind of file (error output, ml, etc)
+$(OUTPUT_DIR)/%.diff: $(OUTPUT_DIR)/% %.expected
+	$(call msg, "DIFF", $<)
+	bash $(FSTAR_ROOT)/mk/diff.sh $^
+	touch $@
+
+$(OUTPUT_DIR)/%.accept: $(OUTPUT_DIR)/%
+	$(call msg, "ACCEPT", $<)
+	cp $< ./$*.expected
+	touch $(OUTPUT_DIR)/$*.diff # touch so subsequent test skips
+
+# Subrules for descending into subdirectories (coallesce with a define?)
+
+%.__depend: # Make sure to sequeantlize the .depend for each subdir, to avoid duplication and races
+	$(MAKE) -C $* depend
+
+%.__all:
+	$(MAKE) -C $* all
+
+%.__verify:
+	$(MAKE) -C $* verify
+
+%.__clean:
+	$(MAKE) -C $* clean
+
+%.__accept:
+	$(MAKE) -C $* accept
+
+SUBDIRS_ALL += $(SUBDIRS)
+all: $(addsuffix .__all, $(SUBDIRS_ALL))
+# __verify: check all files here and in subdirectories (SUBDIRS / SUBDIRS_VERIFY)
+# Implied by 'all' for each directory, but we cannot write 'all: verify' or we
+# will get duplicate invocations for all/verify on a same subdir, and they overlap.
+SUBDIRS_VERIFY += $(SUBDIRS)
+__verify: $(ALL_CHECKED_FILES)
+verify: $(addsuffix .__verify, $(SUBDIRS_VERIFY))
+verify: __verify
+ifeq ($(NOVERIFY),)
+all: __verify
+endif
+
+HAS_OCAML ?= 1
+# We assume we have ocaml, unless HAS_OCAML= was given as an argument
+# to make (this is done by binary package CI). If we don't have ocaml,
+# we don't try to build or run programs.
+ifeq (,$(HAS_OCAML))
+NORUN := 1
+NOBUILD := 1
+endif
+
+# clean
+SUBDIRS_CLEAN += $(SUBDIRS)
+clean: $(addsuffix .__clean, $(SUBDIRS_CLEAN))
+__clean:
+	rm -rf $(OUTPUT_DIR) $(CACHE_DIR) .depend
+clean: __clean
+
+# The rules above name only the root's own checked file, but Custard reads
+# the whole program, so the output would otherwise depend on which other
+# checked files happened to have been built yet
+# (tests/bug-reports/closed/RemoveUnusedTyparsIFace is that case).  This is
+# the same statement mk/custard-extract.mk makes with $(ALL_CHECKED_FILES).
+#
+# Attached to the concrete targets rather than to the pattern rules above.
+# Adding a prerequisite to a pattern rule makes it a *different* rule from a
+# client's identically-named override -- both survive and make picks this
+# one -- which is the trap §49.6 of doc/ref/custard.md describes.  It is
+# order-only so that $< is still the root's checked file.
+RUN_CHERRY := $(filter-out $(NO_CHERRY),$(RUN))
+CUSTARD_EXTRACT_TARGETS := \
+  $(patsubst %.fst,$(OUTPUT_DIR)/%.ml,$(EXTRACT) $(BUILD) $(RUN)) \
+  $(patsubst %.fst,$(OUTPUT_DIR)/%.fs,$(RUN_FSHARP)) \
+  $(patsubst %.ml.expected,$(OUTPUT_DIR)/%.ml,$(wildcard *.ml.expected)) \
+  $(patsubst %.fs.expected,$(OUTPUT_DIR)/%.fs,$(wildcard *.fs.expected)) \
+  $(patsubst %.fst,$(OUTPUT_DIR)/%.cherry.c,$(RUN_CHERRY))
+$(sort $(CUSTARD_EXTRACT_TARGETS)): | $(ALL_CHECKED_FILES)
+
+__extract: $(patsubst %.fst,$(OUTPUT_DIR)/%.ml,$(EXTRACT))
+extract: __extract
+ifeq ($(NOEXTRACT),)
+all: __extract
+endif
+
+__build: $(patsubst %.fst,$(OUTPUT_DIR)/%.exe,$(BUILD))
+build: __build
+ifeq ($(NOBUILD),)
+all: __build
+endif
+
+__run: $(patsubst %.fst,$(OUTPUT_DIR)/%.out,$(RUN))
+__run: $(patsubst %.fst,$(OUTPUT_DIR)/%.fs-out,$(RUN_FSHARP))
+run: __run
+ifeq ($(NORUN),)
+all: __run
+endif
+
+__run_cherry: $(patsubst %.fst,$(OUTPUT_DIR)/%.cherry-out,$(RUN_CHERRY))
+run-cherry: __run_cherry
+ifeq ($(NORUN)$(NOCHERRY),)
+all: __run_cherry
+endif
+
+__diff: $(patsubst %.expected,$(OUTPUT_DIR)/%.diff,$(wildcard *.expected))
+diff: __diff
+ifeq ($(NODIFF),)
+ifeq ($(ACCEPT),1)
+all: __accept
+else
+all: __diff
+endif
+endif
+
+accept: $(addsuffix .__accept,$(SUBDIRS))
+__accept: $(patsubst %.expected,$(OUTPUT_DIR)/%.accept,$(wildcard *.expected))
+accept: __accept
+
+# Client makefiles can extend all these rules (all,verify,clean, etc) by adding more
+# requisites or attaching a recipe.
+
+# Don't delete intermediates.
+.SECONDARY:
+
+# If a rule fails, delete target as it could be corrupted
+.DELETE_ON_ERROR:

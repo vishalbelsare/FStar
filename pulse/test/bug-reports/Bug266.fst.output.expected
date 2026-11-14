@@ -1,0 +1,23 @@
+* Info at Bug266.fst(10,2-10,14):
+  - Expected failure:
+  - Failed to prove pure property: ‘l_False’
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context: uu___0: Prims.unit
+  - See also Bug266.fst(10,31-10,36)
+
+* Info at Bug266.fst(24,2-24,9):
+  - Admitting continuation.
+  - Current context:
+      emp
+  - In typing environment:
+      __#40 : squash (__ == my_intro l_False)
+      __#39 :
+        ghost fn
+          requires pure l_False
+          ensures post ()
+      uu___0#30 : unit
+
+      goto _return#32 requires emp
+

@@ -1,7 +1,7 @@
 # Test the 'include' functionality
 
-FSTAR_HOME=../..
-include $(FSTAR_HOME)/ulib/gmake/fstar.mk
+# Do not warn about missing checked files in these tests.
+OTHERFLAGS += --warn_error -241
 
 POSTESTS=$(wildcard *.pos)
 POSTARGETS=$(addsuffix .pver,$(POSTESTS))
@@ -14,11 +14,12 @@ all: uall
 uall: $(POSTARGETS) $(NEGTARGETS)
 
 $(POSTARGETS): %.pver: %
-	$(FSTAR) --include $^ --odir $^ Test.fst
+	$(MAKE) -C $< check-pos
 
 $(NEGTARGETS): %.nver: %
-	! $(FSTAR) --include $^ --odir $^ Test.fst > $^/error.log 2>&1
-	@echo $^ failed as expected
+	$(MAKE) -C $< check-neg
 
 clean:
-	for f in $(NEGTESTS) ; do rm -f $$f/error.log ; done
+	$(call msg, "CLEAN")
+	$(Q)for f in $(NEGTESTS) ; do $(MAKE) -C $$f clean; done
+	$(Q)for f in $(POSTESTS) ; do $(MAKE) -C $$f clean; done

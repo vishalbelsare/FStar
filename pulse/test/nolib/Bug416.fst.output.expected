@@ -1,0 +1,12 @@
+* Info at Bug416.fst(14,23-14,24):
+  - Expected failure:
+  - Ill-typed term
+  - Subtyping check failed
+  - Expected type x: Prims.int{ref x} got type Prims.int
+  - The SMT solver could not prove the query.
+  - Failed to prove: Bug416.ref 2
+  - In context:
+      Bug416.ref 1
+      __: Prims.unit
+  - See also Bug416.fst(8,23-8,28)
+

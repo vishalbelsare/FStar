@@ -1,0 +1,11 @@
+* Info at QuickTestNBE.fst(124,2-127,34):
+  - Expected failure:
+  - The SMT solver could not prove the query.
+  - Failed to prove: QuickTestNBE.f 4 == 0
+  - In context:
+      va_s0: QuickTestNBE.vale_state
+      ok: Prims.bool
+      QuickTestNBE.f 4 - QuickTestNBE.f 4 == 0
+  - Also see: QuickTestNBE(1,2-3,4)
+  - Other related locations: QuickTestNBE.fst(117,36-117,38)
+

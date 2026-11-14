@@ -1,0 +1,40 @@
+name: Build F* packages
+
+# This builds F* for Linux for the purposes of CI. It runs on a
+# recent Ubuntu runner and also generates a source package.
+# For the purposes of binary releases, see build-linux.yml.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@master
+        with:
+          submodules: true
+
+      - uses: ./.github/actions/setup-fstar-deps
+
+      - name: Produce binary package + source package
+        run: |
+          # Note: we don't package Z3 for the CI artifact, the jobs
+          # consuming it install the relevant Z3 themselves.
+          make -skj$(nproc) package package-src FSTAR_TAG= FSTAR_PACKAGE_Z3=false ADMIT=1
+
+      - uses: actions/upload-artifact@v7
+        with:
+          path: fstar.tar.gz
+          name: fstar.tar.gz
+          retention-days: 3
+      - uses: actions/upload-artifact@v7
+        with:
+          path: fstar-src.tar.gz
+          name: fstar-src.tar.gz
+          retention-days: 3

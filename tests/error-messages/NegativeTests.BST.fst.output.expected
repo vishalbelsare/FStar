@@ -1,0 +1,45 @@
+* Info at NegativeTests.BST.fst(37,38-37,42):
+  - Expected failure:
+  - Subtyping check failed
+  - Expected type
+      right:
+      FStar.Pervasives.Native.option (tree 2)
+        {0 <= 1 /\ 1 <= 2 /\ None? right == (1 = 2) /\ true == (1 = 0)}
+    got type FStar.Pervasives.Native.option (tree 2)
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context: uu___: Prims.unit
+  - See also NegativeTests.BST.fst(25,33-28,57)
+
+* Info at NegativeTests.BST.fst(40,61-40,65):
+  - Expected failure:
+  - Subtyping check failed
+  - Expected type
+      right:
+      FStar.Pervasives.Native.option (tree (l + 1))
+        {l <= l /\ l <= l + 1 /\ None? right == (l = l + 1) /\ false == (l = l)}
+    got type FStar.Pervasives.Native.option (tree (l + 1))
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context:
+      l: Prims.int
+      t: NegativeTests.BST.tree l
+  - See also NegativeTests.BST.fst(25,33-28,57)
+
+* Info at NegativeTests.BST.fst(43,78-43,87):
+  - Expected failure:
+  - Subtyping check failed
+  - Expected type
+      right:
+      FStar.Pervasives.Native.option (tree (l + 1))
+        { l <= l + 1 /\ l + 1 <= l + 1 /\ None? right == (l + 1 = l + 1) /\
+          false == (l + 1 = l) }
+    got type FStar.Pervasives.Native.option (tree (l + 1))
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context:
+      l: Prims.int
+      t1: NegativeTests.BST.tree l
+      t2: NegativeTests.BST.tree (l + 1)
+  - See also NegativeTests.BST.fst(25,33-28,57)
+

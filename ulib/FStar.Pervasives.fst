@@ -13,9 +13,11 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 *)
-
+[@@"no_prelude"]
 module FStar.Pervasives
 
+open FStar.Pervasives.Native
+open FStar.NormSteps
 (* This is a file from the core library, dependencies must be explicit *)
 open Prims
 
@@ -28,6 +30,11 @@ let smt_pat_or _ = ()
 
 let spinoff p = p
 
+#push-options "--no_tactics"
+let spinoff_eq _ = ()
+let spinoff_equiv _ = ()
+#pop-options
+
 let assert_spinoff _ = ()
 
 let ambient #_ _ = True
@@ -37,72 +44,6 @@ let intro_ambient #_ _ = ()
 let normalize_term #_ x = x
 
 let normalize a = a
-
-noeq
-type norm_step =
-  | Simpl // Logical simplification, e.g., [P /\ True ~> P]
-  | Weak // Weak reduction: Do not reduce under binders
-  | HNF // Head normal form
-  | Primops // Reduce primitive operators, e.g., [1 + 1 ~> 2]
-  | Delta // Unfold all non-recursive definitions
-  | Zeta // Unroll recursive calls
-  | ZetaFull // Unroll recursive calls fully
-  | Iota // Reduce case analysis (i.e., match)
-  | NBE // Use normalization-by-evaluation, instead of interpretation (experimental)
-  | Reify // Reify effectful definitions into their representations
-  | UnfoldOnly : list string -> norm_step // Unlike Delta, unfold definitions for only the given
-  // names, each string is a fully qualified name
-  // like `A.M.f`
-  // idem
-  | UnfoldFully : list string -> norm_step
-  | UnfoldAttr : list string -> norm_step // Unfold definitions marked with the given attributes
-  | UnfoldQual : list string -> norm_step
-  | Unmeta : norm_step
-
-irreducible
-let simplify = Simpl
-
-irreducible
-let weak = Weak
-
-irreducible
-let hnf = HNF
-
-irreducible
-let primops = Primops
-
-irreducible
-let delta = Delta
-
-irreducible
-let zeta = Zeta
-
-irreducible
-let zeta_full = ZetaFull
-
-irreducible
-let iota = Iota
-
-irreducible
-let nbe = NBE
-
-irreducible
-let reify_ = Reify
-
-irreducible
-let delta_only s = UnfoldOnly s
-
-irreducible
-let delta_fully s = UnfoldFully s
-
-irreducible
-let delta_attr s = UnfoldAttr s
-
-irreducible
-let delta_qualifier s = UnfoldAttr s
-
-irreducible
-let unmeta = Unmeta
 
 let norm _ #_ x = x
 
@@ -120,50 +61,10 @@ let allow_inversion _ = ()
 
 let invertOption _ = ()
 
+irreducible
 let rec false_elim #_ _ = false_elim ()
-
-let inline_let = ()
-
-let rename_let _ = ()
-
-let plugin _ = ()
-
-let tcnorm = ()
-
-let must_erase_for_extraction = ()
-
-let dm4f_bind_range = ()
-
-let expect_failure _ = ()
-
-let expect_lax_failure _ = ()
-
-let tcdecltime = ()
-
-let unifier_hint_injective = ()
-
-let strict_on_arguments _ = ()
-
-let resolve_implicits = ()
-
-let handle_smt_goals = ()
-
-let erasable = ()
-
-let allow_informative_binders = ()
-
-let commute_nested_matches = ()
-
-let noextract_to _ = ()
-
-let normalize_for_extraction _ = ()
-
-let ite_soundness_by = ()
-
-let strictly_positive = ()
-
-let no_auto_projectors = ()
 
 let singleton #_ x = x
 
-let with_type #_ e = e
+let normalize_for_extraction _ = ()
+let normalize_for_extraction_type = ()

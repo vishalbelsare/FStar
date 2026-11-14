@@ -3,8 +3,8 @@ module ReduceRecUnderMatch
 (** An example adapted from one provided by Son Ho
     Demonstrates the use of the [zeta_full] option of the normalizer *)
 
-module T = FStar.Tactics
-open FStar.Tactics
+module T = FStar.Tactics.V2
+open FStar.Tactics.V2
 
 (** A check to make sure that [t0] doesn't appear in the goal
     and to catch regressions.
@@ -24,7 +24,7 @@ let qname_as_term (x:string) : term =
   let qn = explode_qn x in
   let fv = pack_fv qn in
   let tv = Tv_FVar fv in
-  pack_ln tv
+  pack tv
 
 (** This tactic unfolds only [t] and reduces matches and recursive
     functions fully *)
@@ -56,11 +56,6 @@ let rec f2 (l : list nat)
     postprocess the definition with the unroll tactic *)
 [@@(postprocess_with (unroll (`%f2)))]
 let f3 (b:bool) : Dv bool =
-    f2 [1;2;3;4] b
-
-(** You can also do the same, but wait until extraction to unroll it *)
-[@@(postprocess_for_extraction_with (unroll (`%f2)))]
-let f4 (b:bool) : Dv bool =
     f2 [1;2;3;4] b
 
 let norm_and_check_no t () =

@@ -22,9 +22,14 @@ let test (x:t) : GTot int =
   | This i -> i
   | That _ -> 0
 
+//projectors and discriminators of an erasable type are ghost
 [@@(expect_failure [34])]
 let test1_fail (x:t{This? x}) : Tot int = This?._0 x
 let test1 (x:t{This? x}) : GTot int = This?._0 x
+
+[@@(expect_failure [34])]
+let test2_fail (x:t) : Tot bool = This? x
+let test2 (x:t) : GTot bool = This? x
 
 let test_promotion (x:t) : Tot t =
   match x with
@@ -71,53 +76,33 @@ let e_unit_5 = t
 
 (* Tests for extraction of erasable effects, combined with their lifts to non-erasable effects *)
 
-type repr (a:Type) (_:eqtype_as_type unit) = a
-let return (a:Type) (x:a) : repr a () = x
-let bind (a b:Type) (f:repr a ()) (g:a -> repr b ()) : repr b () = g f
+type repr (a:Type) = a
+let return (a:Type) (x:a) : repr a = x
+let bind (a b:Type) (f:repr a) (g:a -> repr b) : repr b = g f
+[@@ primitive_extraction]
 total
 effect {
-  MPURE (a:Type) (_:eqtype_as_type unit) with {repr; return; bind}
+  MPURE with {repr; return; bind}
 }
 
 //an erasable effect must be marked total
 [@@ erasable; expect_failure [162]]
-new_effect MGHOST = MPURE
+effect {
+  MGHOST_not_total with {repr; return; bind}
+}
 
 [@@ erasable]
-total new_effect MGHOST = MPURE
+total
+effect {
+  MGHOST with {repr; return; bind}
+}
 
-//a lift cannot be in Ghost effect if the source effect is not erasable
-let lift_PURE_MPURE_error (a:Type) (wp:pure_wp a) (f:eqtype_as_type unit -> PURE a wp)
-  : Ghost (repr a ())
-      (requires wp (fun _ -> True))
-      (ensures fun _ -> True)
-  = FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
-    f ()
-[@@ expect_failure [189]]
-sub_effect PURE ~> MPURE = lift_PURE_MPURE_error
+let lift_PURE_MPURE (a:Type) (f:unit -> a) : repr a = f ()
+sub_effect Tot ~> MPURE = lift_PURE_MPURE
+sub_effect Tot ~> MGHOST = lift_PURE_MPURE
 
-//lifts from GHOST effect are not allowed
-//GHOST effect is implicitly lifted/combined with effects when appropriate
-let lift_GHOST_MPURE (a:Type) (wp:pure_wp a) (f:eqtype_as_type unit -> GHOST a wp)
-  : Ghost (repr a ())
-      (requires wp (fun _ -> True))
-      (ensures fun _ -> True)
-  = FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
-    f ()
-[@@expect_failure [187]]
-sub_effect GHOST ~> MPURE = lift_GHOST_MPURE
-
-let lift_PURE_MPURE (a:Type) (wp:pure_wp a) (f:eqtype_as_type unit -> PURE a wp)
-  : Pure (repr a ())
-      (requires wp (fun _ -> True))
-      (ensures fun _ -> True)
-  = FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
-    f ()
-sub_effect PURE ~> MPURE = lift_PURE_MPURE
-sub_effect PURE ~> MGHOST = lift_PURE_MPURE
-
-effect MPure (a:Type) = MPURE a ()
-effect MGhost (a:Type) = MGHOST a ()
+effect MPure (a:Type) = MPURE a
+effect MGhost (a:Type) = MGHOST a
 
 assume val f_mpure : unit -> MPure int
 assume val f_mghost : unit -> MGhost int
@@ -173,11 +158,13 @@ let eff_test6 (b:bool) : MPure int =
 //so far we have tested lifting Ghost,
 //now let's test lifting of MGHOST which is a user-defined erasable effect
 
-new_effect MDIV = MPURE
+effect {
+  MDIV with {repr; return; bind}
+}
 
-effect MDiv (a:Type) = MDIV a ()
+effect MDiv (a:Type) = MDIV a
 
-let lift_MGHOST_MDIV (a:Type) (f:repr a ()) : repr a () = f
+let lift_MGHOST_MDIV (a:Type) (f:repr a) : repr a = f
 sub_effect MGHOST ~> MDIV = lift_MGHOST_MDIV
 
 assume val f_mdiv : unit -> MDiv int
@@ -194,45 +181,40 @@ let eff_test7 () : MDiv int =
   f_mdiv ()
 
 
-(* Let's test polymonadic binds with GHOST and erasable effects with new set of effects *)
+(* Let's test GHOST and erasable effects with a new set of effects *)
 
 total
-new_effect M1 = MPURE
+effect {
+  M1 with {repr; return; bind}
+}
 
 [@@erasable]
 total
-new_effect M2 = MPURE
+effect {
+  M2 with {repr; return; bind}
+}
 
-//instead of defining lifts from PURE To M1 or M2, we define polymonadic binds
-let bind_PURE_M1 (a b:Type) (wp:pure_wp a) (f:eqtype_as_type unit -> PURE a wp) (g:a -> repr b ())
-  : Pure (repr b ())
-      (requires wp (fun _ -> True))
-      (ensures fun _ -> True)
-  = FStar.Monotonic.Pure.elim_pure_wp_monotonicity wp;
-    g (f ())
+sub_effect Tot ~> M1 = lift_PURE_MPURE
+sub_effect Tot ~> M2 = lift_PURE_MPURE
 
-polymonadic_bind (PURE, M1) |> M1 = bind_PURE_M1
-polymonadic_bind (PURE, M2) |> M2 = bind_PURE_M1
-
-assume val f_m1 : unit -> M1 int ()
-assume val f_m2_info : unit -> M2 int ()
-assume val f_m2_noninfo : unit -> M2 unit ()
+assume val f_m1 : unit -> M1 int
+assume val f_m2_info : unit -> M2 int
+assume val f_m2_noninfo : unit -> M2 unit
 
 //we can combine GHOST computation with M2, though we did not define a lift
 //the typechecker implicitly promotes GHOST to PURE and then binds the computation
 //the defn. is erased during extraction as usual
-let eff_test8 () : M2 int () =
+let eff_test8 () : M2 int =
   let x = f_m2_info () in
   let y = f_ghost_info () in
   x + y
 
 //sequencing GHOST and M2 in the other order
 //the defn. is erased during extraction as usual
-let eff_test9 () : M2 int () =
+let eff_test9 () : M2 int =
   let x = f_ghost_info () in
   let y = f_m2_info () in
   x + y
 
-//since we don't have a lift or subcomp, this fails
-[@@ expect_failure [34]]
-let eff_test10 () : M2 int () = f_ghost_info ()
+//M2 is erasable, so a GHOST computation can be promoted to it directly
+let eff_test10 () : M2 int = f_ghost_info ()

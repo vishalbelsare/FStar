@@ -115,7 +115,7 @@ let compatible_trans
 *)
 let compatible_elim
   (#a: Type u#a) (pcm:pcm a) (x y:a)
-  (goal: Type)
+  (goal: prop)
   (lemma: (frame: a{composable pcm x frame /\ op pcm frame x == y}) ->
     Lemma (goal)
   )
@@ -179,6 +179,8 @@ let frame_preserving_val_to_fp_upd (#a:Type u#a) (p:pcm a)
   (x:Ghost.erased a) (v:a{frame_preserving p x v /\ p.refine v})
   : frame_preserving_upd p x v
   = Classical.forall_intro (p.comm v);
+    compatible_refl p v;
+    assert (forall (y z:a). composable p y z <==> composable p z y);
     fun _ -> v
 
 (** The PCM [p] is exclusive to element [x] if the only element composable with [x] is [p.one] *)

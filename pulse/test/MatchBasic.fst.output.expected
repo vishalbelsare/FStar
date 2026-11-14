@@ -1,0 +1,11 @@
+* Info at MatchBasic.fst(134,2-136,3):
+  - Expected failure:
+  - Could not verify that this match is exhaustive.
+  - Patterns are incomplete
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context:
+      xs: Prims.list Prims.int
+      ~(Nil? xs)
+  - Also see: MatchBasic.fst(134,8-134,10)
+

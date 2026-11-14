@@ -29,13 +29,10 @@ bytes, and with support for machine integers and C-extractible versions
 module FStar.Bytes
 
 module S = FStar.Seq
-module U = FStar.UInt
 module U8 = FStar.UInt8
 module U16 = FStar.UInt16
 module U32 = FStar.UInt32
-module U64 = FStar.UInt64
 module Str = FStar.String
-module Chr = FStar.Char
 
 unfold let u8 = U8.t
 unfold let u16 = U16.t
@@ -95,7 +92,7 @@ val get:
     (requires True)
     (ensures (fun y -> y == S.index (reveal b) (U32.v pos)))
 
-unfold let op_String_Access = get
+unfold let ( .[] ) = get
 
 unfold let index (b:bytes) (i:nat{i < length b}) = get b (U32.uint_to_t i)
 
@@ -113,21 +110,21 @@ val extensionality:
 val create:
     len:u32
   -> v:byte
-  -> b:lbytes (U32.v len){forall (i:u32{U32.(i <^ len)}).{:pattern b.[i]} b.[i] == v}
+  -> b:lbytes (U32.v len){forall (i:u32{U32.(i < len)}).{:pattern b.[i]} b.[i] == v}
 
 unfold
 let create_ (n:nat{FStar.UInt.size n U32.n}) v = create (U32.uint_to_t n) v
 
 val init:
     len:u32
-  -> f:(i:u32{U32.(i <^ len)} -> byte)
-  -> b:lbytes (U32.v len){forall (i:u32{U32.(i <^ len)}).{:pattern b.[i]} b.[i] == f i}
+  -> f:(i:u32{U32.(i < len)} -> byte)
+  -> b:lbytes (U32.v len){forall (i:u32{U32.(i < len)}).{:pattern b.[i]} b.[i] == f i}
 
 // this is a hack JROESCH
 val abyte (b:byte) : lbytes 1
     (* admit () create 1ul b *)
 
-val twobytes (b:byte*byte) : lbytes 2
+val twobytes (b:byte&byte) : lbytes 2
     // init 2ul (fun i -> if i = 0ul then fst b else snd b)
 
 (** appending bytes **)
@@ -137,12 +134,12 @@ val append:
   -> Pure bytes
          (requires (UInt.size (length b1 + length b2) U32.n))
          (ensures (fun b -> reveal b == S.append (reveal b1) (reveal b2)))
-unfold let op_At_Bar = append
+unfold let ( @| ) = append
 
 val slice:
     b:bytes
   -> s:u32
-  -> e:u32{U32.(s <=^ e) /\ U32.v e <= length b}
+  -> e:u32{U32.(s <= e) /\ U32.v e <= length b}
   -> r:bytes{reveal r == Seq.slice (reveal b) (U32.v s) (U32.v e)}
 let slice_ b (s:nat) (e:nat{s <= e /\ e <= length b}) = slice b (U32.uint_to_t s) (U32.uint_to_t e)
 
@@ -155,14 +152,14 @@ val sub:
 val split:
     b:bytes
   -> k:u32{U32.v k <= length b}
-  -> p:(bytes*bytes){
+  -> p:(bytes&bytes){
      let x, y = p in
      (reveal x, reveal y) == Seq.split (reveal b) (U32.v k)}
 
 unfold let split_ b (k:nat{FStar.UInt.size k U32.n /\ k < length b}) = split b (U32.uint_to_t k)
 
 (** Interpret a sequence of bytes as a mathematical integer encoded in big endian **)
-let fits_in_k_bytes (n:nat) (k:nat) = FStar.UInt.size n (op_Multiply 8 k)
+let fits_in_k_bytes (n:nat) (k:nat) = FStar.UInt.size n (8 * k)
 type uint_k (k:nat) = n:nat{fits_in_k_bytes n k}
 
 (** repr_bytes n: The number of bytes needed to represent a nat **)
@@ -185,7 +182,7 @@ val lemma_repr_bytes_values:
           [SMTPat (repr_bytes n)]
 
 val repr_bytes_size:
-    k:nat
+    k:pos
   -> n:uint_k k
   -> Lemma (ensures (repr_bytes n <= k))
           [SMTPat (fits_in_k_bytes n k)]
@@ -200,13 +197,13 @@ val bytes_of_int:
   -> lbytes k
 
 val int_of_bytes_of_int:
-  #k:nat{k <= 32}
+  #k:pos{k <= 32}
   -> n:uint_k k
   -> Lemma (ensures (int_of_bytes (bytes_of_int k n) == n))
           [SMTPat (bytes_of_int k n)]
 
 val bytes_of_int_of_bytes:
-    b:bytes{length b <= 32}
+    b:bytes{0 < length b /\ length b <= 32}
   -> Lemma (ensures (bytes_of_int (length b) (int_of_bytes b) == b))
           [SMTPat (int_of_bytes b)]
 
@@ -258,7 +255,7 @@ val xor_append:
   -> b2:bytes{FStar.UInt.size (length b1 + length b2) U32.n}
   -> x1:bytes{len x1 = len b1}
   -> x2:bytes{len x2 = len b2}
-  -> Lemma (ensures (xor U32.(len b1 +^ len b2)
+  -> Lemma (ensures (xor U32.(len b1 + len b2)
                         (b1 @| b2)
                         (x1 @| x2)
                     ==
@@ -272,7 +269,7 @@ val xor_idempotent:
 
 val utf8_encode:
     s:string{Str.maxlen s (pow2 30)}
-  -> b:bytes{length b <= op_Multiply 4 (Str.length s)}
+  -> b:bytes{length b <= 4 * Str.length s}
 
 val iutf8_opt:
     m:bytes
@@ -286,31 +283,3 @@ val hex_of_string: string -> Tot string
 val hex_of_bytes: bytes -> Tot string
 val print_bytes: bytes -> Tot string
 val bytes_of_string: string -> bytes //abytes
-
-(** A better implementation of BufferBytes, formerly found in miTLS *)
-
-module B = LowStar.Buffer
-module M = LowStar.Modifies
-
-open FStar.HyperStack.ST
-
-type lbuffer (l:UInt32.t) = b:B.buffer UInt8.t {B.length b == U32.v l}
-
-val of_buffer (l:UInt32.t) (#p #q:_) (buf:B.mbuffer UInt8.t p q{B.length buf == U32.v l})
-  : Stack (b:bytes{length b = UInt32.v l})
-  (requires fun h0 ->
-    B.live h0 buf)
-  (ensures  fun h0 b h1 ->
-    B.(modifies loc_none h0 h1) /\
-    b = hide (B.as_seq h0 buf))
-
-val store_bytes: src:bytes { length src <> 0 } ->
-  dst:lbuffer (len src) ->
-  Stack unit
-    (requires (fun h0 -> B.live h0 dst))
-    (ensures  (fun h0 r h1 ->
-      M.(modifies (loc_buffer dst) h0 h1) /\
-      Seq.equal (reveal src) (B.as_seq h1 dst)))
-
-(* JP: let's not add from_bytes here because we want to leave it up to the
-caller to allocate on the stack or on the heap *)

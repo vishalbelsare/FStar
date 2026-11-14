@@ -13,7 +13,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
 *)
-
+[@@"no_prelude"]
 module FStar.Pervasives.Native
 
 (* This is a file from the core library, dependencies must be explicit *)
@@ -24,7 +24,7 @@ open Prims
 /// It provides several basic types in F* that enjoy some special
 /// status in extraction. For instance, the tuple type below is
 /// compiled to OCaml's tuple type, rather than to a F*-defined
-/// inductive type. See ulib/ml/FStar_Pervasives_Native.ml
+/// inductive type.
 ///
 
 (** [option a] represents either  [Some a]-value or a non-informative [None]. *)
@@ -37,14 +37,9 @@ type option (a: Type) =
 /// Aside from special support in extraction, the tuple types have
 /// special syntax in F*.
 ///
-/// For instance, rather than [tupleN a1 ... aN],
-/// we usually write [a1 & ... & aN] or [a1 * ... * aN].
-///
-/// The latter notation is more common for those coming to F* from
-/// OCaml or F#. However, the [*] also clashes with the multiplication
-/// operator on integers define in FStar.Mul. For this reason, we now
-/// prefer to use the [&] notation, though there are still many uses
-/// of [*] remaining.
+/// Rather than [tupleN a1 ... aN], we usually write [a1 & ... & aN].
+/// We do not use [a1 * ... * aN] as in other ML-like languages
+/// to avoid clashing with the multiplication operator.
 ///
 /// Tuple values are introduced using as [a1, ..., an], rather than
 /// [MktupleN a1 ... aN].
@@ -59,7 +54,9 @@ type option (a: Type) =
 type tuple2 'a 'b = | Mktuple2 : _1: 'a -> _2: 'b -> tuple2 'a 'b
 
 (** The fst and snd projections on pairs are very common *)
+inline_for_extraction
 let fst (x: tuple2 'a 'b) : 'a = Mktuple2?._1 x
+inline_for_extraction
 let snd (x: tuple2 'a 'b) : 'b = Mktuple2?._2 x
 
 type tuple3 'a 'b 'c = | Mktuple3 : _1: 'a -> _2: 'b -> _3: 'c -> tuple3 'a 'b 'c

@@ -15,10 +15,10 @@
 *)
 module FStar.UInt
 
+open FStar.Seq.Base
 (* NOTE: anything that you fix/update here should be reflected in [FStar.Int.fst], which is mostly
  * a copy-paste of this module. *)
 
-open FStar.Mul
 open FStar.BitVector
 open FStar.Math.Lemmas
 
@@ -96,7 +96,7 @@ let from_vec_aux #n a s1 s2 =
 
 let seq_slice_lemma #n a s1 t1 s2 t2 = ()
 
-#push-options "--initial_fuel 1 --max_fuel 1"
+#push-options "--fuel 1"
 let rec from_vec_propriety #n a s =
   if s = n - 1 then () else begin
     from_vec_propriety #n a (s + 1);
@@ -133,6 +133,7 @@ let zero_from_vec_lemma #n = to_vec_lemma_2 (from_vec (zero_vec #n)) (zero n)
 let one_to_vec_lemma #n i =
   if i = n - 1 then () else zero_to_vec_lemma #n i
 
+#restart-solver
 let rec pow2_to_vec_lemma #n p i =
   if i = n - 1 then ()
   else if p = 0 then one_to_vec_lemma #n i
@@ -289,7 +290,7 @@ let rec to_vec_lt_pow2 #n a m i =
       end
 
 (** Used in the next two lemmas *)
-#push-options "--initial_fuel 0 --max_fuel 1 --z3rlimit 40"
+#push-options "--initial_fuel 0 --max_fuel 1 --z3rlimit_factor 4"
 let rec index_to_vec_ones #n m i =
    let a = pow2 m - 1 in
    pow2_le_compat n m;
@@ -325,6 +326,13 @@ let logand_mask #n a m =
     (logand_vec (to_vec a) (to_vec (pow2 m - 1)))
     (append (zero_vec #(n - m)) (slice (to_vec a) (n - m) n));
   append_lemma #(n - m) #m (zero_vec #(n - m)) (slice (to_vec a) (n - m) n);
+  calc (==) {
+    0 * pow2 m + a % pow2 m;
+    == { }
+    0 + a % pow2 m;
+    == { }
+    a % pow2 m;
+  };
   assert (0 * pow2 m + a % pow2 m == a % pow2 m);
   assert (from_vec #(n - m) (zero_vec #(n - m)) == 0);
   slice_right_lemma #n (to_vec a) m;
@@ -350,6 +358,22 @@ let shift_left_logor_lemma #n a b s = nth_lemma (shift_left #n (logor #n a b) s)
 
 let shift_right_logor_lemma #n a b s = nth_lemma (shift_right #n (logor #n a b) s) (logor #n (shift_right #n a s) (shift_right #n b s))
 
+(* Rotate operators lemmas *)
+
+let rotate_left_lemma #n a s i = ()
+
+let rotate_right_lemma #n a s i = ()
+
+let rotate_left_full_identity #n a = nth_lemma (rotate_left #n a n) a
+
+let rotate_right_full_identity #n a = nth_lemma (rotate_right #n a n) a
+
+#push-options "--z3rlimit_factor 4"
+let rotate_left_right_inverse #n a s = nth_lemma (rotate_right #n (rotate_left #n a s) s) a
+
+let rotate_right_left_inverse #n a s = nth_lemma (rotate_left #n (rotate_right #n a s) s) a
+#pop-options
+
 
 let shift_left_value_aux_1 #n a s = pow2_multiplication_modulo_lemma_1 a n s
 
@@ -373,7 +397,7 @@ let shift_right_value_aux_1 #n a s =
 
 let shift_right_value_aux_2 #n a = assert_norm (pow2 0 == 1)
 
-#push-options "--z3rlimit 20"
+#push-options "--z3rlimit_factor 4"
 let shift_right_value_aux_3 #n a s =
   append_lemma #s #(n - s) (zero_vec #s) (slice (to_vec a) 0 (n - s));
   slice_left_lemma #n (to_vec a) (n - s)
@@ -399,7 +423,7 @@ let lemma_minus_zero #n a =
     logxor_lemma_2 #n (ones n)
   end
 
-#push-options "--z3rlimit 20 --fuel 1 --ifuel 0"
+#push-options "--fuel 1 --ifuel 0"
 let lemma_msb_gte #n a b =
   from_vec_propriety (to_vec a) 1;
   from_vec_propriety (to_vec b) 1
@@ -407,11 +431,9 @@ let lemma_msb_gte #n a b =
 
 (* Lemmas toward showing ~n + 1 = -a *)
 
-// #set-options "--initial_fuel 1 --max_fuel 1 --initial_ifuel 1 --max_ifuel 1"
+// #set-options "--fuel 1 --ifuel 1"
 
-#push-options "--z3rlimit 80"
 let lemma_uint_mod #n a = ()
-#pop-options
 
 let lemma_add_sub_cancel #n a b =
   let ab = (a-b) % pow2 n in
@@ -451,6 +473,19 @@ let lemma_zero_extend #n a =
   from_vec_propriety #(n+1) eav 1;
   assert (r = a)
 
+let lemma_zero_extends #n m a =
+  let hd0 = zero_vec #m in
+  let av = to_vec a in
+  let eav = Seq.append hd0 av in
+  let r = zero_extends m a in
+  append_lemma #m #n hd0 av;
+  assert (r = from_vec eav);
+  assert (from_vec #m hd0 = 0);
+  mul_zero_left_is_zero (pow2 n);
+  inverse_num_lemma a;
+  assert (r = from_vec av);
+  assert (r = a)
+
 let lemma_one_extend #n a =
   let hd1 = Seq.create 1 true in
   let av = to_vec a in
@@ -474,8 +509,8 @@ let lemma_lognot_zero_ext #n a =
   let eav = Seq.append hd0 av in
 
   append_lemma #1 #n hd0 av;
-  assert (from_vec #(n+1) eav = op_Multiply (from_vec #1 hd0) (pow2 n) + from_vec av);
-  assert (op_Multiply (from_vec #1 hd0) (pow2 n) = 0);
+  assert (from_vec #(n+1) eav = from_vec #1 hd0 * pow2 n + from_vec av);
+  assert (from_vec #1 hd0 * pow2 n = 0);
   assert (from_vec #(n+1) eav = from_vec #n av);
   assert (from_vec #(n+1) eav < pow2 n);
 
@@ -483,8 +518,8 @@ let lemma_lognot_zero_ext #n a =
   let neav_r = BitVector.lognot_vec #(n+1) eav in
   let neav_l = Seq.append hd1 nav in
   append_lemma #1 #n hd1 nav;
-  assert (from_vec #(n+1) neav_l = (op_Multiply (from_vec #1 hd1) (pow2 n)) + (from_vec #n nav));
-  assert (op_Multiply (from_vec #1 hd1) (pow2 n) = pow2 n);
+  assert (from_vec #(n+1) neav_l = (from_vec #1 hd1 * pow2 n) + (from_vec #n nav));
+  assert (from_vec #1 hd1 * pow2 n = pow2 n);
   assert (from_vec #(n+1) neav_l = pow2 n + from_vec #n nav);
   assert (pow2 n + from_vec #n nav = rhs);
 
@@ -509,7 +544,6 @@ let lemma_lognot_one_ext #n a =
   let neav_l = Seq.append hd0 nav in
   Seq.Base.lemma_eq_elim neav_l neav_r
 
-#push-options "--z3rlimit 60"
 let rec lemma_lognot_value_mod #n a =
     if n = 1 then () else
     begin
@@ -520,12 +554,11 @@ let rec lemma_lognot_value_mod #n a =
       let tl = from_vec #(n-1) (Seq.slice (to_vec a) 1 n) in
 
       assert (hd = 0 || hd = 1);
-      let hdpow = op_Multiply hd (pow2 (n-1)) in
+      let hdpow = hd * pow2 (n-1) in
 
       from_vec_propriety (to_vec a) 1;
-      assert (from_vec av = (op_Multiply
-                              (from_vec #1     (Seq.slice av 0 1)) (pow2 (n-1))) +
-                              (from_vec #(n-1) (Seq.slice av 1 n)));
+      assert (from_vec av = (from_vec #1     (Seq.slice av 0 1) * pow2 (n-1)) +
+                             from_vec #(n-1) (Seq.slice av 1 n));
 
       let ntl = lognot tl in
       lemma_lognot_value_mod #(n-1) tl;
@@ -546,7 +579,6 @@ let rec lemma_lognot_value_mod #n a =
         lemma_one_extend tl
       end
     end
-#pop-options
 
 let lemma_lognot_value_zero #n a =
   let p = pow2 n in
@@ -569,16 +601,13 @@ let lemma_lognot_value_zero #n a =
   }
 #pop-options
 
-#push-options "--z3rlimit 150"
 private
 val lemma_mod_variation: #n:pos -> a:uint_t n ->
   Lemma (a <> 0 ==> ((-a) % pow2 n) - 1 % pow2 n = (((-a) % pow2 n) - 1) % pow2 n)
-let lemma_mod_variation #n a = ()
-#pop-options
+let lemma_mod_variation #n a = assert (pow2 n =!= 0)
 
 let lemma_one_mod_pow2 #n = ()
 
-#push-options "--z3rlimit 50"
 private
 val lemma_lognot_value_variation: #n:pos -> a:uint_t n{a <> 0} ->
   Lemma (lognot a = (-a) % pow2 n - 1 % pow2 n)
@@ -595,7 +624,6 @@ let lemma_lognot_value_variation #n a =
     == { FStar.Math.Lemmas.lemma_mod_sub_1 a p }
     (-a) % p - 1 % p;
   }
-#pop-options
 
 let lemma_lognot_value_nonzero #n a =
   let p = pow2 n in

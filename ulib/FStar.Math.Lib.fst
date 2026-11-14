@@ -15,7 +15,6 @@
 *)
 module FStar.Math.Lib
 
-open FStar.Mul
 
 (* Definition of the division operator *)
 val lemma_div_def: a:nat -> b:pos -> Lemma (a = b * (a/b) + a % b)
@@ -41,7 +40,7 @@ private let lemma_mul_minus_distr_l (a:int) (b:int) (c:int) : Lemma (a * (b - c)
   = ()
 
 (* Axiom: definition of the "b divides c" relation *)
-#reset-options "--z3rlimit 30"
+#reset-options
 val slash_star_axiom: a:nat -> b:pos -> c:nat -> Lemma
   (requires (a * b = c))
   (ensures  (a = c / b))
@@ -108,9 +107,9 @@ let signed_modulo v p =
   if v >= 0 then v % p
   else 0 - ( (0-v) % p)
 
-val op_Plus_Percent : a:int -> p:pos -> 
+val ( +% ) : a:int -> p:pos -> 
   Tot (res:int{ (a >= 0 ==> res = a % p) /\ (a < 0 ==> res = -((-a) % p)) }) 
-let op_Plus_Percent a p = signed_modulo a p
+let ( +% ) a p = signed_modulo a p
 
 (** Useful lemmas for future proofs **)
 

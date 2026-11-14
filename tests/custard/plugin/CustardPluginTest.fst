@@ -1,0 +1,47 @@
+module CustardPluginTest
+open FStar.Tactics.V2
+open CustardPlugin
+
+(* [norm [primops]] and nothing else: the definitions are irreducible, so
+   the only thing that can reduce them is the native step the loaded plugin
+   registered. *)
+
+let _ = assert (CustardPlugin.f 1 == 124)
+          by (norm [primops]; trefl ())
+
+let _ = assert (CustardPlugin.flip (CustardPlugin.A 3) == CustardPlugin.C 3 "")
+          by (norm [primops]; trefl ())
+
+let _ = assert (CustardPlugin.flip (CustardPlugin.B (3, true)) == CustardPlugin.B (-3, false))
+          by (norm [primops]; trefl ())
+
+let _ = assert (CustardPlugin.fr ({ a = 3; b = true }) == ({ a = -3; b = true } <: CustardPlugin.record))
+          by (norm [primops]; trefl ())
+
+let _ = assert (CustardPlugin.pid 3 == 3)
+          by (norm [primops]; trefl ())
+
+let _ = assert (CustardPlugin.psnd 3 true == true)
+          by (norm [primops]; trefl ())
+
+let _ = assert (CustardPlugin.pcount "x" 5 == 12)
+          by (norm [primops]; trefl ())
+
+let _ = assert (CustardPlugin.pswap 3 true == (true, 3))
+          by (norm [primops]; trefl ())
+
+(* A [@@plugin] in a module nothing else refers to: it registers only because
+   CustardPluginAux is a --custard_entry of its own. *)
+let _ = assert (CustardPluginAux.aux 3 == 300)
+          by (norm [primops]; trefl ())
+
+(* The Tac short-circuit plugins: irreducible, so only the native code can run
+   them, and each case pins down which operand decides the result. *)
+let _ = assert True by (
+  guard (CustardPlugin.sc_right true true (`unit));
+  guard (CustardPlugin.sc_right false false (`int));
+  guard (not (CustardPlugin.sc_right false false (`unit)));
+  guard (not (CustardPlugin.sc_right false true (`int)));
+  guard (CustardPlugin.sc_left (`unit) false);
+  guard (not (CustardPlugin.sc_left (`unit) true));
+  guard (not (CustardPlugin.sc_left (`int) false)))

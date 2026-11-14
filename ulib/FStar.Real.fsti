@@ -22,86 +22,81 @@ module FStar.Real
 
   All these operations are mapped to the corresponding primitives
   in Z3's theory of real arithmetic.
+
+  This is only a logical model of the reals. There is no extraction
+  for them, as they are an erasable type. Any operation that can observe
+  a real (comparisons, etc) must be Ghost or a proposition.
+
+  Unlike most SMT-mapped theories in F*, this one is not merely assumed:
+  [FStar.Real.fst] *implements* everything declared here in terms of
+  [FStar.Real.Dedekind], the reals built from scratch as Dedekind cuts of
+  [FStar.Rational]. So [real] is a concrete type, the field operations are
+  concrete definitions.
+
+  This is exactly the arrangement [FStar.BV] has with [FStar.BitVector]: the
+  symbols below are still given Z3's native interpretation by the SMT
+  encoding --- that is what makes real-arithmetic goals discharge
+  automatically, and it does mean that the *identification* of this type with
+  Z3's [Real] sort remains an assumption of the encoding --- but there is now
+  a construction underneath witnessing that the assumed theory has a model.
+
+  Having a construction underneath also lets this interface state things Z3
+  cannot prove. Z3's reals form an ordered *field*; what makes the reals *the*
+  reals is completeness, and [lub] below exposes it as a theorem of the
+  Dedekind construction. [FStar.Math.Sqrt] uses nothing but [lub] to define an
+  axiom-free square root, discharging the axiom it used to assume.
+
+  Note that the [FStar.Real.Dedekind] hierarchy is deliberately *not* visible
+  in this interface: [FStar.Real] is a dependency of the reflection stubs, and
+  hence of essentially all of F*, so its interface is kept as light as it has
+  always been. The construction is a dependency of [FStar.Real.fst] only.
 *)
 
-val real : eqtype
+[@@erasable]
+val real : Type0
 
 val of_int : int -> Tot real
-
-(**
-  Used to extract real constants; this function is
-  uninterpreted logically. i.e., 1.1R is extracted to
-  [of_string "1.1"]
-  *)
-val of_string: string -> Tot real
 
 val ( +. ) : real -> real -> Tot real
 val ( -. ) : real -> real -> Tot real
 val ( *. ) : real -> real -> Tot real
-val ( /. ) : real -> d:real{d <> 0.0R} -> Tot real
+val ( /. ) : real -> d:real{d =!= 0.0R} -> Tot real
 
-val ( >.  ) : real -> real -> Tot bool
-val ( >=. ) : real -> real -> Tot bool
+val ( >.  ) : real -> real -> prop
+val ( >=. ) : real -> real -> prop
 
-val ( <.  ) : real -> real -> Tot bool
-val ( <=. ) : real -> real -> Tot bool
+val ( <.  ) : real -> real -> prop
+val ( <=. ) : real -> real -> prop
 
-#reset-options "--smtencoding.elim_box true --smtencoding.l_arith_repr native --smtencoding.nl_arith_repr native"
-//Tests
 let zero : real = of_int 0
-let one : real = of_int 1
-let two : real = of_int 2
+let one  : real = of_int 1
+let two  : real = of_int 2
 
-val sqrt_2 : r:real{r *. r = two}
+(**** Completeness *)
 
-let n_over_n2 (n:real{n <> 0.0R /\ n*.n <> 0.0R}) = assert (n /. (n *. n) == 1.0R /. n)
+/// Z3's theory of reals is a theory of ordered *fields*: it says nothing at
+/// all about completeness, so nothing below can be discharged by SMT. It is
+/// instead *proved* in [FStar.Real.fst], where [real] is the type of Dedekind
+/// cuts of [FStar.Rational] and the least upper bound is a construction.
+///
+/// This is what makes [real] the reals rather than some arbitrary ordered
+/// field, and it is what [FStar.Math.Sqrt] uses to define a square root
+/// without assuming one.
 
-let test = assert (two >. one)
-let test1 = assert (one = 1.0R)
+/// Sets of reals, as predicates.
+let rset = real -> prop
 
-let test_lt1 = assert (1.0R <. 2.0R)
-let test_lt2 = assert (~ (1.0R <. 1.0R))
-let test_lt3 = assert (~ (2.0R <. 1.0R))
+let is_upper_bound (s:rset) (b:real) : prop = forall (x:real). s x ==> x <=. b
+let is_bounded_above (s:rset) : prop = exists (b:real). is_upper_bound s b
+let is_nonempty (s:rset) : prop = exists (x:real). s x
+let is_lub (s:rset) (b:real) : prop =
+  is_upper_bound s b /\ (forall (c:real). is_upper_bound s c ==> b <=. c)
 
-let test_le1 = assert (1.0R <=. 2.0R)
-let test_le2 = assert (1.0R <=. 1.0R)
-let test_le3 = assert (~ (2.0R <=. 1.0R))
+/// The least upper bound of a nonempty, bounded-above set of reals.
+val lub (s:rset)
+  : Ghost real
+      (requires is_nonempty s /\ is_bounded_above s)
+      (ensures  fun b -> is_lub s b)
 
-let test_gt1 = assert (~ (1.0R >. 2.0R))
-let test_gt2 = assert (~ (1.0R >. 1.0R))
-let test_gt3 = assert (2.0R >. 1.0R)
-
-let test_ge1 = assert (~ (1.0R >=. 2.0R))
-let test_ge2 = assert (1.0R >=. 1.0R)
-let test_ge3 = assert (2.0R >=. 1.0R)
-
-let test_add_eq = assert (1.0R +. 1.0R = 2.0R)
-let test_add_eq' = assert (1.0R +. 3.0R = 4.0R)
-let test_add_lt = assert (1.0R +. 1.0R <. 3.0R)
-
-let test_mul_eq = assert (2.0R *. 2.0R = 4.0R)
-let test_mul_lt = assert (2.0R *. 2.0R <. 5.0R)
-
-let test_div_eq = assert (8.0R /. 2.0R = 4.0R)
-let test_div_lt = assert (8.0R /. 2.0R <. 5.0R)
-
-let test_sqrt_2_mul = assert (sqrt_2 *. sqrt_2 = 2.0R)
-//let test_sqrt_2_add = assert (sqrt_2 +. sqrt_2 >. 2.0R) // Fails
-let test_sqrt_2_scale = assert (1.0R /. sqrt_2 = sqrt_2 /. 2.0R)
-
-// Common identities
-let add_id_l = assert (forall n. 0.0R +. n = n)
-let add_id_r = assert (forall n. n +. 0.0R = n)
-
-let mul_nil_l = assert (forall n. 0.0R *. n = 0.0R)
-let mul_nil_r = assert (forall n. n *. 0.0R = 0.0R)
-
-let mul_id_l = assert (forall n. 1.0R *. n = n)
-let mul_id_r = assert (forall n. n *. 1.0R = n)
-
-let add_comm = assert (forall x y. x +. y = y +.x)
-let add_assoc = assert (forall x y z. ((x +. y) +.z) = (x +. (y +. z)))
-
-let mul_comm = assert (forall x y. x *. y = y *.x)
-let mul_assoc = assert (forall x y z. ((x *. y) *.z) = (x *. (y *. z)))
-let mul_dist = assert (forall x y z. x *. (y +. z) = (x *. y) +. (x *.z))
+/// Every real is dominated by a natural number.
+val archimedean (x:real) : Lemma (exists (n:nat). x <. of_int n)

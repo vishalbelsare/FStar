@@ -1,0 +1,11 @@
+* Info at QuickTest.fst(124,2-127,34):
+  - Expected failure:
+  - The SMT solver could not prove the query.
+  - Failed to prove: QuickTest.f 4 == 0
+  - In context:
+      va_s0: QuickTest.vale_state
+      ok: Prims.bool
+      QuickTest.f 4 - QuickTest.f 4 == 0
+  - Also see: QuickTest(1,2-3,4)
+  - Other related locations: QuickTest.fst(117,32-117,40)
+

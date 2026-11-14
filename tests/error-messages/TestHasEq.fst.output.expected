@@ -1,0 +1,30 @@
+* Info at TestHasEq.fst(58,10-58,11):
+  - Expected failure:
+  - Failed to prove that the type
+    ‘TestHasEq.t3’
+    supports decidable equality because of this argument.
+  - Add either the ‘noeq’ or ‘unopteq’ qualifier
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.hasEq a
+  - In context:
+      a: Type0
+      x: a
+  - See also TestHasEq.fst(57,0-58,19)
+
+* Info at TestHasEq.fst(85,5-85,6):
+  - Expected failure:
+  - Subtyping check failed
+  - Expected type Prims.eqtype got type Type0
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.hasEq TestHasEq.erasable_t
+  - In context:
+      x: x: TestHasEq.erasable_t{C_erasable_t? x}
+      y: y: TestHasEq.erasable_t{D_erasable_t? y}
+  - See also Prims.fst(91,23-91,30)
+
+* Info at TestHasEq.fst(88,8-89,30):
+  - Expected failure:
+  - Invalid qualifiers for declaration ‘type TestHasEq.erasable_t2’
+  - The `unopteq` qualifier is not allowed on erasable inductives since they
+    don't have decidable equality.
+

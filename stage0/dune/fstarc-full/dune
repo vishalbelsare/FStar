@@ -1,0 +1,15 @@
+(include_subdirs unqualified)
+(executable
+ (name fstarc1_full)
+ (public_name fstar.exe)
+ (libraries
+    ; The in-tree plugins (plugins.ml) are now folded into the wrapped
+    ; fstarcompiler library (fstar-guts), so there is no separate fstar_plugins
+    ; library to link here. -linkall still pulls in the plugin registrations.
+    fstarcompiler
+    memtrace
+ )
+ (link_flags "-linkall")
+ (modes (native exe))
+ (preprocess (pps ppx_deriving.show ppx_deriving_yojson))
+)

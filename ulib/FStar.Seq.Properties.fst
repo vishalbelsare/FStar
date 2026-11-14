@@ -160,7 +160,6 @@ let lemma_swap_permutes_aux_frag_eq #a s i j i' j' =
   cut (equal (slice s i (i + 1))  (slice (swap s i j) j (j + 1)));
   cut (equal (slice s j (j + 1))  (slice (swap s i j) i (i + 1)))
 
-#push-options "--z3rlimit 20"
 let lemma_swap_permutes_aux #_ s i j x =
   if j=i
   then cut (equal (swap s i j) s)
@@ -187,7 +186,12 @@ let lemma_swap_permutes_aux #_ s i j x =
       lemma_append_count_aux x frag_mid (append frag_i frag_hi);
       lemma_append_count_aux x frag_i frag_hi
   end
-#pop-options  
+
+let append_permutations #a s1 s2 s1' s2' =
+  (
+    lemma_append_count s1 s2;
+    lemma_append_count s1' s2'
+  )
 
 let lemma_swap_permutes #a s i j
   = FStar.Classical.forall_intro
@@ -200,7 +204,7 @@ let lemma_swap_permutes #a s i j
      of each other also have the same length
 *)
 //a proof optimization: Z3 only needs to unfold the recursive definition of `count` once
-#push-options "--fuel 1 --ifuel 1 --z3rlimit 20"
+#push-options "--fuel 1 --ifuel 1"
 let rec perm_len' (#a:eqtype) (s1 s2: seq a)
   : Lemma (requires (permutation a s1 s2))
           (ensures  (length s1 == length s2))
@@ -380,10 +384,8 @@ module L = FStar.List.Tot
 
 let lemma_seq_of_list_induction #_ l
   = match l with
-    | []    -> assert_norm (seq_of_list l == Seq.empty)
-    | hd::tl ->
-      assert_norm (seq_of_list (hd::tl) == create 1 hd @| seq_of_list tl);
-      lemma_tl hd (seq_of_list tl)
+    | [] -> ()
+    | hd::tl -> lemma_tl hd (seq_of_list tl)
 
 let rec lemma_seq_list_bij': #a:Type -> s:seq a -> Lemma
   (requires (True))
@@ -421,6 +423,7 @@ let rec lemma_index_is_nth': #a:Type -> s:seq a -> i:nat{i < length s} -> Lemma
   (ensures  (L.index (seq_to_list s) i == index s i))
   (decreases i)
 = fun #_ s i ->
+  assert (s `equal` cons (head s) (tail s));
   if i = 0 then ()
   else (
     lemma_index_is_nth' (slice s 1 (length s)) (i-1)
@@ -443,11 +446,10 @@ private let intro_append_contains_from_disjunction (#a:Type) (s1:seq a) (s2:seq 
     : Lemma (requires s1 `contains` x \/ s2 `contains` x)
             (ensures (append s1 s2) `contains` x)
     = let open FStar.Classical in
-      let open FStar.Squash in
       or_elim #(s1 `contains` x) #(s2 `contains` x) #(fun _ -> (append s1 s2) `contains` x)
         (fun _ -> ())
-	(fun _ -> let s = append s1 s2 in
-               exists_elim (s `contains` x) (get_proof (s2 `contains` x)) (fun k ->
+        (fun _ -> let s = append s1 s2 in
+               exists_elim (s `contains` x) (() <: squash (s2 `contains` x)) (fun k ->
                assert (Seq.index s (Seq.length s1 + k) == x)))
 
 let append_contains_equiv #_ s1 s2 x
@@ -587,7 +589,10 @@ let elim_of_list #_ l = elim_of_list' 0 (seq_of_list l) l
 
 let rec lemma_seq_to_list_permutation' (#a:eqtype) (s:seq a)
   :Lemma (requires True) (ensures (forall x. count x s == List.Tot.Base.count x (seq_to_list s))) (decreases (length s))
-  = if length s > 0 then lemma_seq_to_list_permutation' (slice s 1 (length s))
+  = if length s > 0 then (
+      assert (equal s (cons (head s) (tail s)));
+      lemma_seq_to_list_permutation' (slice s 1 (length s))
+    )
 
 let lemma_seq_to_list_permutation = lemma_seq_to_list_permutation'
 

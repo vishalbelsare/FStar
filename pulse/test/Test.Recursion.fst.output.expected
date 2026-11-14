@@ -1,0 +1,44 @@
+* Info at Test.Recursion.fst(86,18-86,20):
+  - Expected failure:
+  - Ill-typed term
+  - Could not prove termination
+  - The SMT solver could not prove the query.
+  - Failed to prove: () << ()
+  - In context:
+      x: Prims.unit
+      test_ghost_loop:
+
+            x':
+              Prims.unit
+                { FStar.Range.labeled FStar.Range.range_0
+                    "Could not prove termination"
+                    (() << ()) }
+          -> ghost fn
+               requires Pulse.Lib.Core.emp
+               ensures Pulse.Lib.Core.emp
+  - See also Test.Recursion.fst(86,2-86,20)
+
+* Info at Test.Recursion.fst(130,17-130,22):
+  - Expected failure:
+  - Ill-typed term
+  - Could not prove termination
+  - The SMT solver could not prove the query.
+  - Failed to prove: z - 1 << z
+  - In context:
+      z: Prims.int
+      y: Prims.nat
+      test5':
+
+            z': Prims.int ->
+            y':
+              Prims.nat
+                { FStar.Range.labeled FStar.Range.range_0
+                    "Could not prove termination"
+                    (z' << z) }
+          -> ghost fn
+               requires Pulse.Lib.Core.emp
+               ensures Pulse.Lib.Core.emp
+      (z <> 0 && y <> 0) == true
+      y - 1 >= 0
+  - See also Test.Recursion.fst(130,4-130,22)
+

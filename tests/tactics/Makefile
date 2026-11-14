@@ -1,14 +1,20 @@
-FSTAR_HOME=../..
+FSTAR_ROOT ?= ../..
+include $(FSTAR_ROOT)/mk/test.mk
 
-FSTAR_FILES=$(wildcard *.fst)
+all: Hacl.Meta.Use.fst.test
 
-all: verify-all
+# TacTest exercises reification of the Tac effect during extraction.
+all: $(OUTPUT_DIR)/TacTest.ml
 
-include $(FSTAR_HOME)/examples/Makefile.common
+$(OUTPUT_DIR)/TacTest.ml: $(CACHE_DIR)/TacTest.fst.checked
+	$(call msg, "EXTRACT", TacTest.fst)
+	$(FSTAR) TacTest.fst --codegen Plugin --odir $(OUTPUT_DIR)
 
-verify-all: $(CACHE_DIR) $(addsuffix .checked, $(addprefix $(CACHE_DIR)/, $(FSTAR_FILES)))
+Hacl_Meta.ml: $(CACHE_DIR)/Hacl.Meta.fst.checked
+	$(FSTAR) Hacl.Meta.fst --codegen Plugin
 
-clean:
-	rm -f .depend
-	rm -rf _cache
-	rm -rf _output
+Hacl.Meta.Use.fst.test: Hacl.Meta.Use.fst Hacl_Meta.ml
+	$(FSTAR) $< --load Hacl.Meta
+	touch $@
+
+$(OUTPUT_DIR)/Postprocess.fst.output: FSTAR_ARGS+=--dump_module Postprocess --ugly

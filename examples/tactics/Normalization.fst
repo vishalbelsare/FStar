@@ -15,7 +15,7 @@
 *)
 module Normalization
 
-open FStar.Tactics
+open FStar.Tactics.V2
 
 (* A tactic that returns its argument after some steps of normalization *)
 (* NOTE: This is relying on our unusual quote, which can inspect the shape of `x`
@@ -29,18 +29,18 @@ let normalize (#t:Type) (steps : list norm_step) (x:t) : Tac unit =
 
 (* This tactic also depends on said behaviour of quote, and returns the definition of a top-level fvar *)
 let def_of (#t:Type) (x:t) : Tac term =
-  admit();
   let e = cur_env () in
   let t = quote x in
   match inspect t with
+  | Tv_UInst fv _
   | Tv_FVar fv -> begin
     let se = match lookup_typ e (inspect_fv fv) with
              | None -> fail "Not found..?"
              | Some se -> se
     in
     match inspect_sigelt se with
-    | Sg_Let _ lbs -> begin
-      let lbv = lookup_lb_view lbs (inspect_fv fv) in
+    | Sg_Let {lbs} -> begin
+      let lbv = lookup_lb lbs (inspect_fv fv) in
       lbv.lb_def
       end
     | _ -> fail "not a sig_let"
@@ -62,15 +62,19 @@ let _ = assert True
                 then ()
                 else fail "Test 1")
 
+(* GM, 2023/11/09: this is now no longer true. The unifier does trigger
+primitive steps computations, and the trefl() call above
+will instantiate the RHS with the WHNF of the LHS, which is also 4. *)
+
 (* If we only allow for Delta steps, then there's no primitive computation and we
  * end up with (2 + 1) + 1 *)
-let four' : int = _ by (normalize [delta] (add_2 2))
+(* let four' : int = _ by (normalize [delta] (add_2 2)) *)
 
-let _ = assert True
-            by (let t = def_of four' in
-                if compare_term t (`((2 + 1) + 1)) = FStar.Order.Eq
-                then ()
-                else fail "Test 2")
+(* let _ = assert True *)
+(*             by (let t = def_of four' in *)
+(*                 if compare_term t (`((2 + 1) + 1)) = FStar.Order.Eq *)
+(*                 then () *)
+(*                 else fail "Test 2") *)
 
 (* Here, we allow for primitive computation but don't allow for `add_2` to be expanded to
  * its definition, so the final result is `add_2 1` *)
@@ -98,7 +102,7 @@ let _ = assert (four'' == 4)
 
 let _ = assert True
             by (let t = def_of four'' in
-                let s = `(does_not_normalize #int (2 + 2)) in
+                let s = `(does_not_normalize u#0 #int (2 + 2)) in
                 if compare_term t s = FStar.Order.Eq
                 then ()
-                else fail "Test 4")
+                else fail ("Test 4: " ^ (term_to_string t) ^ " and " ^ (term_to_string s)))

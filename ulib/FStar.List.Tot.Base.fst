@@ -68,12 +68,28 @@ let rec init = function
   | [_] -> []
   | hd::tl -> hd::(init tl)
 
+(** [length_acc l acc] is [acc + length l], computed tail-recursively.
+It is the extracted implementation of [length]; see
+[length_acc_correct]. *)
+let rec length_acc (#a:Type) (l:list a) (acc:nat) : Tot nat (decreases l) =
+  match l with
+  | [] -> acc
+  | _::tl -> length_acc tl (acc + 1)
+
 (** [length l] returns the total number of elements in [l]. Named as
-in: OCaml, F#, Coq *)
+in: OCaml, F#, Coq.  It is extracted as [length_acc l 0], which runs
+in constant stack space. *)
 val length: list 'a -> Tot nat
+[@@FStar.ExtractAs.extract_as (`(fun (#a:Type) (l:list a) -> length_acc #a l 0))]
 let rec length = function
   | [] -> 0
   | _::tl -> 1 + length tl
+
+let rec length_acc_correct (#a:Type) (l:list a) (acc:nat)
+  : Lemma (ensures length_acc l acc == acc + length l) (decreases l)
+  = match l with
+    | [] -> ()
+    | _::tl -> length_acc_correct tl (acc + 1)
 
 (** [nth l n] returns the [n]-th element in list [l] (with the first
 element being the 0-th) if [l] is long enough, or [None]
@@ -86,7 +102,7 @@ let rec nth l n = match l with
 (** [index l n] returns the [n]-th element in list [l] (with the first
 element being the 0-th). Requires, at type-checking time, that [l] be
 of length at least [n+1]. *)
-val index: #a:Type -> l:list a -> i:nat{i < length l} -> Tot a
+val index: #a:Type -> l:list a -> i:nat{i < length l} -> Tot a (decreases i)
 let rec index #a (l: list a) (i:nat{i < length l}): Tot a =
   if i = 0 then
     hd l
@@ -121,7 +137,7 @@ let rec append x y = match x with
   | a::tl -> a::append tl y
 
 (** Defines notation [@@] for [append], as in OCaml, F# . *)
-let op_At x y = append x y
+let ( @ ) x y = append x y
 
 (** [snoc (l, x)] adds [x] to the end of the list [l].
 
@@ -133,7 +149,7 @@ let op_At x y = append x y
     either be too restrictive or would lead to over-triggering. More
     context for this can be seen in the (collapsed and uncollapsed)
     comments at https://github.com/FStarLang/FStar/pull/1560 *)
-val snoc: (list 'a * 'a) -> Tot (list 'a)
+val snoc: (list 'a & 'a) -> Tot (list 'a)
 let snoc (l, x) = append l [x]
 
 (** [flatten l], where [l] is a list of lists, returns the list of the
@@ -148,7 +164,7 @@ let rec flatten l = match l with
 of results, in the order of the original elements in [l]. Requires, at
 type-checking time, [f] to be a pure total function. Named as in: OCaml, Coq, F# *)
 val map: ('a -> Tot 'b) -> list 'a -> Tot (list 'b)
-let rec map f x = match x with
+let rec map ([@@@FStar.Attributes.monomorphize] f) x = match x with
   | [] -> []
   | a::tl -> f a::map f tl
 
@@ -157,7 +173,7 @@ element of [l] and returns the list of results, in the order of the
 original elements in [l]. Requires, at type-checking time, [f] to be a
 pure total function. *)
 val mapi_init: (int -> 'a -> Tot 'b) -> list 'a -> int -> Tot (list 'b)
-let rec mapi_init f l i = match l with
+let rec mapi_init ([@@@FStar.Attributes.monomorphize] f) l i = match l with
     | [] -> []
     | hd::tl -> (f i hd)::(mapi_init f tl (i+1))
 
@@ -166,14 +182,14 @@ let rec mapi_init f l i = match l with
 elements in [l]. Requires, at type-checking time, [f] to be a pure
 total function. Named as in: OCaml *)
 val mapi: (int -> 'a -> Tot 'b) -> list 'a -> Tot (list 'b)
-let mapi f l = mapi_init f l 0
+let mapi ([@@@FStar.Attributes.monomorphize] f) l = mapi_init f l 0
 
 (** [concatMap f l] applies [f] to each element of [l] and returns the
 concatenation of the results, in the order of the original elements of
 [l]. This is equivalent to [flatten (map f l)]. Requires, at
 type-checking time, [f] to be a pure total function. *)
 val concatMap: ('a -> Tot (list 'b)) -> list 'a -> Tot (list 'b)
-let rec concatMap f = function
+let rec concatMap ([@@@FStar.Attributes.monomorphize] f) = function
   | [] -> []
   | a::tl ->
     let fa = f a in
@@ -184,7 +200,7 @@ let rec concatMap f = function
 ... yn). Requires, at type-checking time, [f] to be a pure total
 function. Named as in: OCaml, Coq. *)
 val fold_left: ('a -> 'b -> Tot 'a) -> 'a -> l:list 'b -> Tot 'a (decreases l)
-let rec fold_left f x l = match l with
+let rec fold_left ([@@@FStar.Attributes.monomorphize] f) x l = match l with
   | [] -> x
   | hd::tl -> fold_left f (f x hd) tl
 
@@ -192,7 +208,7 @@ let rec fold_left f x l = match l with
 y)) ... )). Requires, at type-checking time, [f] to be a pure total
 function. Named as in: OCaml, Coq *)
 val fold_right: ('a -> 'b -> Tot 'b) -> list 'a -> 'b -> Tot 'b
-let rec fold_right f l x = match l with
+let rec fold_right ([@@@FStar.Attributes.monomorphize] f) l x = match l with
   | [] -> x
   | hd::tl -> f hd (fold_right f tl x)
 
@@ -215,7 +231,7 @@ let map_gtot #a #b (f:a -> GTot b) (x:list a)
 [z1; z2; ...; zn] to have the same lengths. Named as in: OCaml *)
 val fold_left2 : f:('a -> 'b -> 'c -> Tot 'a) -> accu:'a -> l1:(list 'b) -> l2:(list 'c) ->
   Pure 'a (requires (length l1 == length l2)) (ensures (fun _ -> True)) (decreases l1)
-let rec fold_left2 f accu l1 l2 =
+let rec fold_left2 ([@@@FStar.Attributes.monomorphize] f) accu l1 l2 =
   match (l1, l2) with
   | ([], []) -> accu
   | (a1::l1, a2::l2) -> fold_left2 f (f accu a1 a2) l1 l2
@@ -225,7 +241,7 @@ equality. *)
 
 (** [memP x l] holds if, and only if, [x] appears as an
 element of [l]. Similar to: List.In in Coq. *)
-let rec memP (#a: Type) (x: a) (l: list a) : Tot Type0 =
+let rec memP (#a: Type) (x: a) (l: list a) : prop =
   match l with
   | [] -> False
   | y :: q -> x == y \/ memP x q
@@ -245,7 +261,7 @@ let rec mem #a x = function
 element of [l]. Requires, at type-checking time, the type of elements
 of [l] to have decidable equality. It is equivalent to: [mem x
 l]. TODO: should we rather swap the order of arguments? *)
-let contains = mem
+let contains : #a:eqtype -> a -> list a -> Tot bool = mem
 
 (** [existsb f l] returns [true] if, and only if, there exists some
 element [x] in [l] such that [f x] holds. *)
@@ -253,7 +269,7 @@ val existsb: #a:Type
        -> f:(a -> Tot bool)
        -> list a
        -> Tot bool
-let rec existsb #a f l = match l with
+let rec existsb #a ([@@@FStar.Attributes.monomorphize] f) l = match l with
  | [] -> false
  | hd::tl -> if f hd then true else existsb f tl
 
@@ -263,7 +279,7 @@ val find: #a:Type
         -> f:(a -> Tot bool)
         -> list a
         -> Tot (option (x:a{f x}))
-let rec find #a f l = match l with
+let rec find #a ([@@@FStar.Attributes.monomorphize] f) l = match l with
   | [] -> None #(x:a{f x}) //These type annotations are only present because it makes bootstrapping go much faster
   | hd::tl -> if f hd then Some #(x:a{f x}) hd else find f tl
 
@@ -273,34 +289,35 @@ predicate [f] *)
 (** [filter f l] returns [l] with all elements [x] such that [f x]
 does not hold removed. Requires, at type-checking time, [f] to be a
 pure total function.  Named as in: OCaml, Coq *)
-val filter : #a: Type -> f:(a -> Tot bool) -> l: list a -> Tot (m:list a{forall x. memP x m ==> f x})
-let rec filter #a f = function
+val filter : #a: Type -> f:(a -> Tot bool) -> l: list a -> Tot (list a)
+let rec filter #a ([@@@FStar.Attributes.monomorphize] f) = function
   | [] -> []
   | hd::tl -> if f hd then hd::filter f tl else filter f tl
 
 (** Postcondition on [filter f l]: for any element [x] of [filter f l],
-[f x] holds. Requires, at type-checking time, [f] to be a pure total
-function.*)
-val mem_filter (#a:Type) (f: (a -> Tot bool)) (l: list a) (x: a) : Lemma
-  (requires (memP x (filter f l)))
-  (ensures (f x))
-let mem_filter f l x = ()
+[x] is a member of [l] and [f x] holds. Requires, at type-checking time,
+[f] to be a pure total function.*)
+let rec mem_filter (#a: Type) (f: (a -> Tot bool)) (l: list a) (x: a)
+    : Lemma (memP x (filter f l) <==> memP x l /\ f x) =
+  match l with
+  | [] -> ()
+  | hd :: tl -> mem_filter f tl x
 
 (** Postcondition on [filter f l]: stated with [forall]: for any element
-[x] of [filter f l], [f x] holds. Requires, at type-checking time, [f]
-to be a pure total function. *)
-val mem_filter_forall (#a:Type) (f: (a -> Tot bool)) (l: list a) : Lemma
-  (requires True)
-  (ensures (forall x . memP x (filter f l) ==> f x))
-  [SMTPat (filter f l)]
-let mem_filter_forall f l = FStar.Classical.ghost_lemma (mem_filter f l)
+[x] of [filter f l], [x] is a member of [l] and [f x] holds. Requires,
+at type-checking time, [f] to be a pure total function.*)
+let mem_filter_forall (#a: Type) (f: (a -> Tot bool)) (l: list a)
+    : Lemma (forall x. memP x (filter f l) <==> memP x l /\ f x)
+            [SMTPat (filter f l)] =
+  introduce forall x . memP x (filter f l) <==> memP x l /\ f x
+  with mem_filter f l x
 
 (** [for_all f l] returns [true] if, and only if, for all elements [x]
 appearing in [l], [f x] holds. Requires, at type-checking time, [f] to
 be a pure total function. Named as in: OCaml. Similar to: List.forallb
 in Coq *)
 val for_all: ('a -> Tot bool) -> list 'a -> Tot bool
-let rec for_all f l = match l with
+let rec for_all ([@@@FStar.Attributes.monomorphize] f) l = match l with
     | [] -> true
     | hd::tl -> if f hd then for_all f tl else false
 
@@ -315,13 +332,33 @@ let rec for_all_mem
   | [] -> ()
   | _ :: q -> for_all_mem f q
 
+(** [for_allP pre l] returns [true] if, and only if,
+for all elements [x] appearing in [l], [pre x] holds. *)
+
+val for_allP: #a:Type -> (a -> prop) -> list a -> prop
+let rec for_allP #a pre l =
+  match l with
+  | [] -> True
+  | h::t -> pre h /\ for_allP pre t
+
+(** Specification for [for_allP pre l] vs. memP *)
+
+val for_allP_eq:
+  #a:Type ->
+  pre:(a -> prop) -> l:list a ->
+  Lemma (for_allP pre l <==> (forall x. memP x l ==> pre x))
+let rec for_allP_eq #a pre l =
+  match l with
+  | [] -> ()
+  | h::t -> for_allP_eq pre t
+
 (** [collect f l] applies [f] to each element of [l] and returns the
 concatenation of the results, in the order of the original elements of
 [l]. It is equivalent to [flatten (map f l)]. Requires, at
 type-checking time, [f] to be a pure total function. TODO: what is
 the difference with [concatMap]? *)
 val collect: ('a -> Tot (list 'b)) -> list 'a -> Tot (list 'b)
-let rec collect f l = match l with
+let rec collect ([@@@FStar.Attributes.monomorphize] f) l = match l with
     | [] -> []
     | hd::tl -> append (f hd) (collect f tl)
 
@@ -331,7 +368,7 @@ exists. Requires, at type-checking time, [f] to be a pure total
 function. Contrary to [find], [tryFind] provides no postcondition on
 its result. *)
 val tryFind: ('a -> Tot bool) -> list 'a -> Tot (option 'a)
-let rec tryFind p l = match l with
+let rec tryFind ([@@@FStar.Attributes.monomorphize] p) l = match l with
     | [] -> None
     | hd::tl -> if p hd then Some hd else tryFind p tl
 
@@ -340,7 +377,7 @@ such that [f x = Some y] for some y, or [None] only if [f x = None]
 for all elements [x] of [l]. Requires, at type-checking time, [f] to
 be a pure total function. *)
 val tryPick: ('a -> Tot (option 'b)) -> list 'a -> Tot (option 'b)
-let rec tryPick f l = match l with
+let rec tryPick ([@@@FStar.Attributes.monomorphize] f) l = match l with
     | [] -> None
     | hd::tl ->
        match f hd with
@@ -351,7 +388,7 @@ let rec tryPick f l = match l with
 appearing in [l] such that [f x = Some y] for some [y]. Requires, at
 type-checking time, [f] to be a pure total function. *)
 val choose: ('a -> Tot (option 'b)) -> list 'a -> Tot (list 'b)
-let rec choose f l = match l with
+let rec choose ([@@@FStar.Attributes.monomorphize] f) l = match l with
     | [] -> []
     | hd::tl ->
        match f hd with
@@ -363,8 +400,8 @@ elements [x] of [l] are in [l1] if [f x] holds, and in [l2]
 otherwise. Both [l1] and [l2] retain the original order of
 [l]. Requires, at type-checking time, [f] to be a pure total
 function. *)
-val partition: f:('a -> Tot bool) -> list 'a -> Tot (list 'a * list 'a)
-let rec partition f = function
+val partition: f:('a -> Tot bool) -> list 'a -> Tot (list 'a & list 'a)
+let rec partition ([@@@FStar.Attributes.monomorphize] f) = function
   | [] -> [], []
   | hd::tl ->
      let l1, l2 = partition f tl in
@@ -405,7 +442,7 @@ let rec no_repeats_p #a la =
 of [l] whose first element is [x], or [None] only if no such element
 exists. Requires, at type-checking time, the type of [x] to have
 decidable equality. Named as in: OCaml. *)
-val assoc: #a:eqtype -> #b:Type -> a -> list (a * b) -> Tot (option b)
+val assoc: #a:eqtype -> #b:Type -> a -> list (a & b) -> Tot (option b)
 let rec assoc #a #b x = function
   | [] -> None
   | (x', y)::tl -> if x=x' then Some y else assoc x tl
@@ -413,7 +450,7 @@ let rec assoc #a #b x = function
 (** [split] takes a list of pairs [(x1, y1), ..., (xn, yn)] and
 returns the pair of lists ([x1, ..., xn], [y1, ..., yn]). Named as in:
 OCaml *)
-val split: list ('a * 'b) -> Tot (list 'a * list 'b)
+val split: list ('a & 'b) -> Tot (list 'a & list 'b)
 let rec split l = match l with
     | [] -> ([],[])
     | (hd1,hd2)::tl ->
@@ -428,7 +465,7 @@ let unzip l = split l
 (** [unzip3] takes a list of triples [(x1, y1, z1), ..., (xn, yn, zn)]
 and returns the triple of lists ([x1, ..., xn], [y1, ..., yn], [z1,
 ..., zn]). Named as in: Haskell *)
-val unzip3: list ('a * 'b * 'c) -> Tot (list 'a * list 'b * list 'c)
+val unzip3: list ('a & 'b & 'c) -> Tot (list 'a & list 'b & list 'c)
 let rec unzip3 l = match l with
     | [] -> ([],[],[])
     | (hd1,hd2,hd3)::tl ->
@@ -440,7 +477,7 @@ let rec unzip3 l = match l with
 (** [splitAt] takes a natural number n and a list and returns a pair
     of the maximal prefix of l of size smaller than n and the rest of
     the list *)
-let rec splitAt (#a:Type) (n:nat) (l:list a) : Tot (list a * list a) =
+let rec splitAt (#a:Type) (n:nat) (l:list a) : Tot (list a & list a) =
   if n = 0 then [], l
   else
     match l with
@@ -458,7 +495,7 @@ let rec lemma_splitAt_snd_length (#a:Type) (n:nat) (l:list a) :
 
 (** [unsnoc] is an inverse of [snoc]. It splits a list into
     all-elements-except-last and last element. *)
-val unsnoc: #a:Type -> l:list a{length l > 0} -> Tot (list a * a)
+val unsnoc: #a:Type -> l:list a{length l > 0} -> Tot (list a & a)
 let unsnoc #a l =
   let l1, l2 = splitAt (length l - 1) l in
   lemma_splitAt_snd_length (length l - 1) l;
@@ -467,7 +504,7 @@ let unsnoc #a l =
 (** [split3] splits a list into 3 parts. This allows easy access to
     the part of the list before and after the element, as well as the
     element itself. *)
-val split3: #a:Type -> l:list a -> i:nat{i < length l} -> Tot (list a * a * list a)
+val split3: #a:Type -> l:list a -> i:nat{i < length l} -> Tot (list a & a & list a)
 let split3 #a l i =
   let a, rest = splitAt i l in
   lemma_splitAt_snd_length i l;
@@ -496,7 +533,7 @@ let rec partition_length f l = match l with
     OCaml and F#, where sorting is performed in ascending order.
 *)
 val bool_of_compare : #a:Type -> (a -> a -> Tot int) -> a -> a -> Tot bool
-let bool_of_compare #a f x y = f x y < 0
+let bool_of_compare #a ([@@@FStar.Attributes.monomorphize] f) x y = f x y < 0
 
 (** [compare_of_bool] turns a strict order into a comparison
 function. More precisely, [compare_of_bool rel x y] returns a positive
@@ -506,7 +543,7 @@ infix operator are such that [compare x y] is positive if, and only
 if, x > y. Requires, at type-checking time, [rel] to be a pure total
 function.  *)
 val compare_of_bool : #a:eqtype -> (a -> a -> Tot bool) -> a -> a -> Tot int
-let compare_of_bool #a rel x y =
+let compare_of_bool #a ([@@@FStar.Attributes.monomorphize] rel) x y =
     if x `rel` y  then -1
     else if x = y then 0
     else 1
@@ -520,7 +557,7 @@ let compare_of_bool_of_compare (#a:eqtype) (f:a -> a -> Tot bool)
     way that if [compare x y > 0], then [x] appears before [y] in
     [l']. Sorts in ascending order *)
 val sortWith: ('a -> 'a -> Tot int) -> l:list 'a -> Tot (list 'a) (decreases (length l))
-let rec sortWith f = function
+let rec sortWith ([@@@FStar.Attributes.monomorphize] f) = function
   | [] -> []
   | pivot::tl ->
      let hi, lo = partition (bool_of_compare f pivot) tl in
@@ -529,7 +566,7 @@ let rec sortWith f = function
 
 (** A l1 is a strict suffix of l2. *)
 let rec strict_suffix_of (#a: Type) (l1 l2: list a)
-: Pure Type0
+: Pure prop
   (requires True)
   (ensures (fun _ -> True))
   (decreases l2)
@@ -540,7 +577,7 @@ let rec strict_suffix_of (#a: Type) (l1 l2: list a)
 [@@deprecated "This function was misnamed: Please use 'strict_suffix_of'"]
 let strict_prefix_of = strict_suffix_of
 
-val list_unref : #a:Type -> #p:(a -> Type0) -> list (x:a{p x}) -> Tot (list a)
+val list_unref : #a:Type -> #p:(a -> prop) -> list (x:a{p x}) -> Tot (list a)
 let rec list_unref #a #p l =
     match l with
     | [] -> []

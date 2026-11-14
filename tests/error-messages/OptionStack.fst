@@ -15,14 +15,28 @@
 *)
 module OptionStack
 
+assume val p : int -> prop
+
 [@@expect_failure]
-let _ = assert False
+let t0 = assert (p 1)
+
+[@@expect_failure]
+let t1 = assert (p 2)
+
+[@@expect_failure]
+let t2 = assert False
 
 #push-options "--admit_smt_queries true"
 
-let _ = assert False
+(* Annotated: without it these definitions have type [squash False], and an
+   admitted definition of that type is a proof of [False] for everything that
+   follows -- which would defeat the point of the check below. *)
+let t3 : unit = assert False
+let t4 : unit = assert False
+let t5 : unit = assert False
+let t6 : unit = assert False
 
 #pop-options
 
 [@@expect_failure]
-let _ = assert False
+let t7 = assert False

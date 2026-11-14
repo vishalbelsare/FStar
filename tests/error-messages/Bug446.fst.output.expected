@@ -1,0 +1,15 @@
+* Info at Bug446.fst(30,59-30,62):
+  - Expected failure:
+  - Subtyping check failed
+  - Expected type wP a got type wP b
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.has_type _ b
+  - In context:
+      a: Type
+      b: Type
+      wp1: Bug446.wP a
+      wp2: Bug446.wP b
+      f: Bug446.m a wp1
+      uu___: a
+  - See also Bug446.fst(29,55-29,58)
+

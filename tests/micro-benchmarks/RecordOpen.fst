@@ -1,7 +1,6 @@
 module RecordOpen
 
 open FStar.VConfig
-open FStar.Mul
 
 type ty = {x:int; y:bool}
 

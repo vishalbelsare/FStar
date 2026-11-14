@@ -15,7 +15,7 @@
 *)
 module Wild
 
-open FStar.Tactics
+open FStar.Tactics.V2
 open FStar.Classical
 
 let id x = x
@@ -28,23 +28,21 @@ let id x = x
 
 (* A more elaborate test *)
 
-val exists_weaken: #a:Type -> p:(a -> Type) -> q:(a -> Type) -> h:(forall (x:a{p x}). q x) -> x:a{p x}
+val exists_weaken: #a:Type -> p:(a -> prop) -> q:(a -> prop) -> h:(forall (x:a{p x}). q x) -> x:a{p x}
   -> GTot (squash (exists x. q x))
 let exists_weaken #a p q h x = exists_intro q x
 
 val a : Type0
 let a = unit
 
-val p : a -> Type0
+val p : a -> prop
 let p x = True
 
-val q : a -> Type0
+val q : a -> prop
 let q x = False
 
-val fact: (h:squash (exists x. p x)) -> Lemma (exists x. q x)
-
 [@@(expect_failure [19])]
-let fact h =
+let fact (h:squash (exists x. p x)) : Lemma (exists x. q x) =
    assert (exists x. q x)
        by (apply_lemma (`exists_elim);
            exact (quote h);

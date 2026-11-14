@@ -1,0 +1,131 @@
+* Info at Calc.fst(11,2-11,13):
+  - Expected failure:
+  - Could not prove that this calc-chain is compatible
+  - The SMT solver could not prove the query.
+  - Failed to prove: Calc.eta Prims.op_Greater_Equals x y
+  - In context:
+      uu___: Prims.unit
+      x: Prims.int
+      y: Prims.int
+      exists (w: Prims.int).
+        (exists (w: Prims.int). x == w /\ Calc.eta Prims.op_Greater_Equals w w) /\
+        Calc.eta Prims.op_Less_Equals w y
+  - See also FStar.Calc.fsti(43,50-43,55)
+
+* Info at Calc.fst(21,7-21,11):
+  - Expected failure:
+  - Could not prove that this calc-chain is compatible
+  - The SMT solver could not prove the query.
+  - Failed to prove: x >= y
+  - In context:
+      uu___: Prims.unit
+      x: Prims.int
+      y: Prims.int
+      exists (w: Prims.int). (exists (w: Prims.int). x == w /\ w >= w) /\ w <= y
+
+* Info at Calc.fst(32,7-32,10):
+  - Expected failure:
+  - Could not prove that this calc-chain is compatible
+  - The SMT solver could not prove the query.
+  - Failed to prove: x < y
+  - In context:
+      uu___: Prims.unit
+      x: Prims.int
+      y: Prims.int
+      x == y
+
+* Info at Calc.fst(39,7-39,10):
+  - Expected failure:
+  - Could not prove that this calc-chain is compatible
+  - The SMT solver could not prove the query.
+  - Failed to prove: x > y
+  - In context:
+      x: Prims.int
+      x: Prims.int
+      y: Prims.int
+      exists (w: Prims.int). x == w /\ w == y
+
+* Info at Calc.fst(50,6-50,8):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context:
+      uu___: Prims.unit
+      uu___: Prims.unit
+      uu___: Prims.unit
+      uu___: Prims.unit
+      uu___: Prims.unit
+  - See also Calc.fst(50,3-50,5)
+
+* Info at Calc.fst(64,6-64,8):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context:
+      uu___: Prims.unit
+      uu___: Prims.unit
+      uu___: Prims.unit
+      uu___: Prims.unit
+  - See also Calc.fst(64,3-64,5)
+
+* Info at Calc.fst(78,6-78,8):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context:
+      uu___: Prims.unit
+      uu___: Prims.unit
+      uu___: Prims.unit
+  - See also Calc.fst(78,3-78,5)
+
+* Info at Calc.fst(92,42-92,44):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Calc.q
+  - In context:
+      uu___: Prims.unit
+      uu___: Prims.unit
+      uu___: Prims.unit
+      Calc.p
+  - See also Calc.fst(90,20-90,21)
+
+* Info at Calc.fst(99,10-99,12):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Calc.q
+  - In context:
+      uu___: Prims.unit
+      uu___: Prims.unit
+      uu___: Prims.unit
+      Calc.p
+  - See also Calc.fst(100,4-100,5)
+
+* Info at Calc.fst(113,17-113,25):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context:
+      x: Prims.int
+      uu___: Prims.unit
+      uu___: Prims.unit
+      uu___: Prims.unit
+  - See also Calc.fst(104,12-104,17)
+
+* Info at Calc.fst(120,9-120,17):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context:
+      x: Prims.int
+      uu___: Prims.unit
+      uu___: Prims.unit
+      uu___: Prims.unit
+  - See also Calc.fst(104,12-104,17)
+

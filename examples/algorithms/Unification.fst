@@ -31,7 +31,7 @@ module Unification
 open FStar.List.Tot
 
 (* First, a missing lemma from the list library *)
-let op_At = append
+let ( @ ) = append
 val lemma_shift_append: #a:eqtype -> l:list a -> x:a -> m:list a -> Lemma
   (ensures ( (l@(x::m)) = ((l@[x])@m)))
 let rec lemma_shift_append #a l x m = match l with
@@ -58,7 +58,7 @@ let rec vars = function
   | F t1 t2 -> OrdSet.union (vars t1) (vars t2)
 
 (* Equations among pairs of terms, to be solved *)
-type eqns  = list (term * term)
+type eqns  = list (term & term)
 
 (* All the variables in a set of equations *)
 val evars : eqns -> Tot varset
@@ -91,7 +91,7 @@ let rec n_flex_rhs = function
   | _::tl -> n_flex_rhs tl
 
 (* A point substitution *)
-type subst = (nat * term)
+type subst = (nat & term)
 
 (* Composition of point substitutions *)
 type lsubst = list subst
@@ -358,7 +358,6 @@ val unify_correct_aux: l:list subst -> e:eqns -> Pure (list subst)
 		  l' = (m @ l)
 		 /\ solved (lsubst_eqns l' e)))
  (decreases %[n_evars e; efuns e; n_flex_rhs e])
-#set-options "--z3rlimit 100"
 let rec unify_correct_aux l = function
   | [] -> []
   | hd::tl ->

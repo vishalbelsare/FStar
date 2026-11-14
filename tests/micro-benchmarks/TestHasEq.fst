@@ -45,7 +45,7 @@ let test3 = assert (hasEq (t1 bool))
 
 let test4 = assert (hasEq (dtuple2 nat (fun x -> y:nat{y > x})))
 
-assume type tp (t:Type0) : Type0
+assume type tp (t:Type0) : prop
 
 type t2 (t:Type0{tp t}) =
   | Bad: t2 t
@@ -84,6 +84,6 @@ type erasable_t =
 let test (x:erasable_t{C_erasable_t? x}) (y:erasable_t{D_erasable_t? y}) : Tot (n:int{n == 1}) =
   if x = y then 0 else 1  //this would extract to if () = () then 0 else 1 if we allowed equality on erasable_t
 
-[@@erasable expect_failure]
+[@@erasable; expect_failure]
 unopteq type erasable_t2 =
   | C_erasable_2 : erasable_t2

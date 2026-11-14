@@ -1,0 +1,35 @@
+* Info at Bug267.fst(13,4-13,6):
+  - Expected failure:
+  - Tactic failed
+  - Expected a total term, but this term has Ghost effect
+
+* Info at Bug267.fst(58,4-58,5):
+  - Expected failure:
+  - Could not prove equality between computed type ‘int’ and expected type ‘nat’
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: i >= 0
+  - In context:
+      x: Prims.nat
+      y: Prims.nat
+      ctr: Pulse.Lib.Reference.ref Prims.int
+      acc: Pulse.Lib.Reference.ref Prims.int
+      __: Prims.unit
+      ___8: FStar.Ghost.erased Prims.unit
+      __c89: FStar.Ghost.erased (FStar.Ghost.erased Prims.int)
+      __a910: FStar.Ghost.erased (FStar.Ghost.erased Prims.int)
+      __c89 <= x /\ __a910 == __c89 * y
+      ___8 == ()
+      false == (__c89 < x)
+      i: Prims.int
+  - Also see: Prims.fst(477,18-477,24)
+  - See also Bug267.fst(58,4-58,8)
+
+* Info at Bug267.fst(63,2-63,17):
+  - Expected failure:
+  - Tactic failed
+  - Cannot prove:
+      n >= 1
+  - In the context:
+
+

@@ -95,7 +95,7 @@ let merge'_stable #a l r k = merge'_filter_eq_inv l r k
 
 (** split_n splits a list at index n **)
 val split_n: #a:eqtype -> (l:list a) -> n:nat{0 < n /\ n < length l} ->
-  Tot (l_tup:(list a * list a){(fst l_tup)@(snd l_tup) = l
+  Tot (l_tup:(list a & list a){(fst l_tup)@(snd l_tup) = l
     /\ length (fst l_tup) < length l
     /\ length (snd l_tup) < length l
     /\ permutation_2 l (fst l_tup) (snd l_tup)})
@@ -106,11 +106,11 @@ let rec split_n #a l n =
 
 (** split_half splits a list halfway **)
 val split_half: #a:eqtype -> (l:list a{length l >= 2}) ->
-  Tot (l_tup:(list a * list a))
+  Tot (list a & list a)
 let split_half #a l = split_n l ((length l) / 2)
 
 (** Define mergesort **)
-val mergesort': #a:eqtype -> l:list a -> k:(a -> Tot int) -> Tot (l':list a) (decreases (length l))
+val mergesort': #a:eqtype -> l:list a -> k:(a -> Tot int) -> Tot (list a) (decreases (length l))
 let rec mergesort' #a l k =
   match l with
   | []
@@ -146,6 +146,17 @@ let rec mergesort'_permutation #a l k =
     mergesort'_permutation splt2 k;
     merge'_permutation (mergesort' splt1 k) (mergesort' splt2 k) k
 
+(** Mergesort of a non-empty list is non-empty **)
+val mergesort'_cons: #a:eqtype -> l:list a{Cons? l} -> k:(a -> Tot int) ->
+  Lemma (ensures Cons? (mergesort' l k))
+  (decreases (length l))
+let rec mergesort'_cons #a l k =
+  match l with
+  | [_] -> ()
+  | _::_::_ ->
+    let splt1, splt2 = split_half l in
+    mergesort'_cons splt1 k
+
 (** Mergesort is stable **)
 val mergesort'_stable: #a:eqtype -> l:list a -> k:(a -> Tot int) ->
   Lemma(ensures (stable l (mergesort' l k) k))
@@ -158,6 +169,8 @@ let rec mergesort'_stable #a l k =
     mergesort'_stable splt1 k;
     mergesort'_stable splt2 k;
     stable_append splt1 (mergesort' splt1 k) splt2 (mergesort' splt2 k) k;
+    mergesort'_cons splt1 k;
+    mergesort'_cons splt2 k;
     mergesort'_sorted splt1 k;
     mergesort'_sorted splt2 k;
     merge'_stable (mergesort' splt1 k) (mergesort' splt2 k) k

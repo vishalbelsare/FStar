@@ -96,13 +96,13 @@ let rec insert'' x t =
                     else if x < n then Node n (insert'' x t1) t2
                     else               Node n t1 (insert'' x t2)
 
-#push-options "--initial_fuel 1 --max_fuel 1 --initial_ifuel 1 --max_ifuel 1"
+#push-options "--fuel 1 --ifuel 1"
 
 val insert_lemma : x:int -> t:tree{is_bst t} -> Lemma
       (is_bst (insert'' x t) /\
       (forall y. in_tree y (insert'' x t) <==> in_tree y t \/ x = y))
 //AR: tightening a bit here, since works locally but fails on CI
-#push-options "--initial_fuel 1 --max_fuel 1 --initial_ifuel 1 --max_ifuel 1"
+#push-options "--fuel 1 --ifuel 1"
 let rec insert_lemma x t = match t with
   | Leaf -> ()
   | Node _ t1 t2 -> insert_lemma x t1; insert_lemma x t2
@@ -130,7 +130,6 @@ let find_max_eq t = find_max_lemma t
 val delete : x:int -> t:tree{is_bst t} ->
   Tot (r:tree{is_bst r /\ not (in_tree x r)  /\
               (forall y. x <> y ==> (in_tree y t = in_tree y r))}) (decreases t)
-#set-options "--z3rlimit 15"
 let rec delete x t = match t with
   | Leaf -> Leaf
   | Node n t1 t2 -> if n = x then
@@ -156,7 +155,6 @@ let rec delete' x t = match t with
                     else if x < n then Node n (delete' x t1) t2
                          else Node n t1 (delete' x t2)
 
-#set-options "--z3rlimit 20"
 val delete_lemma : x:int -> t:tree{is_bst t} ->
       Lemma (ensures (is_bst (delete' x t) /\ not (in_tree x (delete' x t)) /\
         (forall y. x <> y ==> (in_tree y (delete' x t) = in_tree y t))))

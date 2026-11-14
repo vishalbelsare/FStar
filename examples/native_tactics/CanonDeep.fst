@@ -15,10 +15,9 @@
 *)
 module CanonDeep
 
-open FStar.Tactics
-open FStar.Reflection
-open FStar.Reflection.Arith
-open FStar.Mul
+open FStar.Tactics.V2
+open FStar.Reflection.V2
+open FStar.Reflection.V2.Arith
 module O = FStar.Order
 
 (* TODO: The implementation from FStar.Tactics.Canon seems *very* naive:
@@ -144,12 +143,10 @@ let pack_fv' (n:name) : term = pack_ln (Tv_FVar (pack_fv n))
 let rec expr_to_term (e:expr) : Tot term =
   match e with
   | Atom i t -> t
-  | Lit i -> pack_ln (Tv_Const (C_Int i))
+  | Lit i -> pack_ln (Tv_Const (C_Int i (FStar.Sealed.seal Dec)))
   | Plus l r -> mk_e_app (pack_fv' add_qn) [expr_to_term l; expr_to_term r]
   | Minus l r -> mk_e_app (pack_fv' minus_qn) [expr_to_term l; expr_to_term r]
   | Mult l r -> mk_e_app (pack_fv' mult_qn) [expr_to_term l; expr_to_term r]
-                (* <- TODO this has some chance of not round-tripping well
-                           since there is also mult'_qn *)
   | Neg l -> mk_e_app (pack_fv' neg_qn) [expr_to_term l]
     (* TODO all the ones below also have implicit arguments that have to be *)
     (*      passed too (number of bits); just how am I supposed to know them? *)

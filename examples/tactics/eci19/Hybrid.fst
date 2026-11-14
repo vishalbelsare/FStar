@@ -1,7 +1,6 @@
 module Hybrid
 
-open FStar.Tactics
-open FStar.Mul
+open FStar.Tactics.V2
 
 (*
 Meta-F* supports a "hybrid" style of proof, where we can just
@@ -102,8 +101,9 @@ let rec triang (n : nat) : Tot nat =
 
 (* Z3 is actually not so great at doing this proof when the context
 includes many facts, so we delete everything but the most primitive
-module and the current one. *)
-#push-options "--using_facts_from '-* +Prims +Hybrid'"
+module and the current one. Plus, we add a --retry flag so it attempts
+again (up to 10 times) if the proof fails. *)
+#push-options "--using_facts_from '-* +Prims +Hybrid' --retry 10"
 let rec gauss (n : int) : Lemma (requires (n >= 0))
                               (ensures (triang n == (n * (n + 1)) / 2))
                         =

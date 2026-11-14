@@ -13,8 +13,8 @@ let rec false_elim (#a:Type) (x:False) : a = false_elim x
 
 //SNIPPET_START: and_intro$
 let and_intro #p #q (pf_p:p) (pf_q:q)
-  : p & q
-  = pf_p, pf_q
+  : pair p q
+  = Pair pf_p pf_q
 //SNIPPET_END: and_intro$
 
 //SNIPPET_START: conj_intro$
@@ -57,14 +57,12 @@ let conj_elim_2 #p #q (pf_pq:squash (p /\ q))
 let conj_elim_sugar_1 #p #q (pf_pq:squash (p /\ q))
   : squash p
   = eliminate p /\ q
-    returns p
-    with pf_p pf_q. pf_p
+    with ()
 
 let conj_elim_sugar_2 #p #q (pf_pq:squash (p /\ q))
   : squash p
   = eliminate p /\ q
-    returns p
-    with pf_p pf_q. pf_q
+    with ()
 //SNIPPET_END: conj_elim_sugar$
 
 //SNIPPET_START: or_intro$
@@ -72,7 +70,7 @@ let or_intro_left #p #q (pf_p:squash p)
   : squash (p \/ q)
   = ()
 
-let or_intro_right #p #q (pf_p:squash p)
+let or_intro_right #p #q (pf_q:squash q)
   : squash (p \/ q)
   = ()
 //SNIPPET_END: or_intro$
@@ -83,21 +81,21 @@ let or_intro_sugar_left #p #q (pf_p:squash p)
   = introduce p \/ q
     with Left pf_p
 
-let or_intro_sugar_right #p #q (pf_p:squash p)
+let or_intro_sugar_right #p #q (pf_q:squash q)
   : squash (p \/ q)
   = introduce p \/ q
-    with Right pf_p
+    with Right pf_q
 //SNIPPET_END: or_intro_sugar$
 
-//SNIPPET_START: either_elim$
-let either_elim #p #q #r (p_or_q: either p q)
+//SNIPPET_START: sum_elim$
+let sum_elim #p #q #r (p_or_q: sum p q)
                          (pr: p -> r)
                          (qr: q -> r)
   : r
   = match p_or_q with
-    | Inl p -> pr p
-    | Inr q -> qr q
-//SNIPPET_END: either_elim$
+    | Left p -> pr p
+    | Right q -> qr q
+//SNIPPET_END: sum_elim$
 
 //SNIPPET_START: or_elim$
 let or_elim #p #q #r (pf_p:squash (p \/ q))
@@ -114,26 +112,25 @@ let or_elim_sugar #p #q #r
                   (pf_qr:unit -> Lemma (requires q) (ensures r))
   : squash r
   = eliminate p \/ q
-    returns r
-    with pf_p. pf_pr () //pf_p : squash p
-    and  pf_q. pf_qr () //pf_q : squash q
+    with pf_pr () //p is in scope here
+    and pf_qr () //q is in scope here
 //SNIPPET_END: or_elim_sugar$
 
 //SNIPPET_START: implies_intro$
 let implies_intro_1 #p #q (pq: squash p -> squash q)
   : squash (p ==> q)
   = introduce p ==> q
-    with pf_p. pq pf_p
+    with pq ()
 
 let implies_intro_2 #p #q (pq: unit -> Lemma (requires p) (ensures q))
   : squash (p ==> q)
   = introduce p ==> q
-    with pf_p. pq pf_p
+    with pq ()
 
 let implies_intro_3 #p #q (pq: unit -> Lemma (requires p) (ensures q))
   : Lemma (p ==> q)
   = introduce p ==> q
-    with pf_p. pq pf_p
+    with pq ()
 //SNIPPET_END: implies_intro$
 
 //SNIPPET_START: implies_elim$
@@ -151,7 +148,7 @@ let implies_elim_sugar #p #q (pq:squash (p ==> q)) (pf_p: squash p)
 let neg_intro #p (f:squash p -> squash False)
   : squash (~p)
   = introduce p ==> False
-    with pf_p. f pf_p
+    with f ()
 //SNIPPET_END: neg_intro$
 
 //SNIPPET_START: neg_elim$
@@ -164,14 +161,14 @@ let neg_elim #p #q (f:squash (~p)) (lem:unit -> Lemma p)
 
 //SNIPPET_START: forall_intro$
 let forall_intro_1 (#t:Type)
-                   (#q:t -> Type)
+                   (#q:t -> prop)
                    (f : (x:t -> squash (q x)))
   : squash (forall (x:t). q x)
   = introduce forall (x:t). q x
     with f x
 
 let forall_intro_2 (#t:Type)
-                   (#q:t -> Type)
+                   (#q:t -> prop)
                    (f : (x:t -> Lemma (q x)))
   : squash (forall (x:t). q x)
   = introduce forall (x:t). q x
@@ -179,7 +176,7 @@ let forall_intro_2 (#t:Type)
 
 let forall_intro_3 (#t0:Type)
                    (#t1:t0 -> Type)
-                   (#q: (x0:t0 -> x1:t1 x0 -> Type))
+                   (#q: (x0:t0 -> x1:t1 x0 -> prop))
                    (f : (x0:t0 -> x1:t1 x0 ->  Lemma (q x0 x1)))
   : squash (forall (x0:t0) (x1:t1 x0). q x0 x1)
   = introduce forall (x0:t0) (x1:t1 x0). q x0 x1
@@ -188,7 +185,7 @@ let forall_intro_3 (#t0:Type)
 
 //SNIPPET_START: forall_elim_1$
 let forall_elim_1 (#t:Type)
-                  (#q:t -> Type)
+                  (#q:t -> prop)
                   (f : squash (forall (x:t). q x))
                   (a:t)
   : squash (q a)
@@ -198,7 +195,7 @@ let forall_elim_1 (#t:Type)
 //SNIPPET_START: forall_elim_sugar$
 let forall_elim_2 (#t0:Type)
                   (#t1:t0 -> Type)
-                  (#q: (x0:t0 -> x1:t1 x0 -> Type))
+                  (#q: (x0:t0 -> x1:t1 x0 -> prop))
                   (f : squash (forall x0 x1. q x0 x1))
                   (v0: t0)
                   (v1: t1 v0)
@@ -206,6 +203,27 @@ let forall_elim_2 (#t0:Type)
   = eliminate forall x0 x1. q x0 x1
     with v0 v1
 //SNIPPET_END: forall_elim_sugar$
+
+let forall_elim_2_desugar
+                  (#t0:Type)
+                  (#t1:t0 -> Type)
+                  (#q: (x0:t0 -> x1:t1 x0 -> prop))
+                  (f : squash (forall x0 x1. q x0 x1))
+                  (v0: t0)
+                  (v1: t1 v0)
+  : squash (q v0 v1)
+  =
+//SNIPPET_START: forall_elim_2_desugar$
+   FStar.Classical.Sugar.forall_elim
+           #(t1 v0)
+           #(fun x1 -> q v0 x1)
+           v1
+           (FStar.Classical.Sugar.forall_elim
+              #t0
+              #(fun x0 -> forall (x1: t1 x0). q x0 x1)
+              v0
+              ())
+//SNIPPET_END: forall_elim_2_desugar$
 
 //SNIPPET_START: dtuple2_intro$
 let dtuple2_intro (x:int) (y:int { y > x })
@@ -216,14 +234,14 @@ let dtuple2_intro (x:int) (y:int { y > x })
 
 //SNIPPET_START: exists_intro$
 let exists_intro_1 (#t:Type)
-                   (#q:t -> Type)
+                   (#q:t -> prop)
                    (a:t) (b:t)
                    (f : squash (q a /\ q b))
   : squash (exists x. q x)
   = () //instantiation found by SMT, it chose a or b, unclear/irrelevant which
 
 let exists_intro_2 (#t:Type)
-                   (#q:t -> Type)
+                   (#q:t -> prop)
                    (a:t) (b:t)
                    (f : squash (q a))
                    (g : squash (q b))
@@ -233,7 +251,7 @@ let exists_intro_2 (#t:Type)
     and f  //proof term of q applied to witness
 
 let exists_intro_3 (#t:Type)
-                   (#q:t -> Type)
+                   (#q:t -> prop)
                    (a:t) (b:t)
                    (f : squash (q a /\ q b))
   : squash (exists x. q x)
@@ -244,7 +262,7 @@ let exists_intro_3 (#t:Type)
 
 
 //SNIPPET_START: dtuple2_elim$
-let dtuple2_elim (#t:Type) (#p:t -> Type) (#q:Type)
+let dtuple2_elim (#t:Type) (#p:t -> prop) (#q:Type)
                  (pf: (x:t & p x))
                  (k : (x:t -> p x -> q))
   : q
@@ -253,20 +271,18 @@ let dtuple2_elim (#t:Type) (#p:t -> Type) (#q:Type)
 //SNIPPET_END: dtuple2_elim$
 
 //SNIPPET_START: exists_elim$
-let exists_elim (#t:Type) (#p:t -> Type) (#q:Type)
+let exists_elim (#t:Type) (#p:t -> prop) (#q:prop)
                  (pf: squash (exists (x:t). p x))
                  (k : (x:t -> squash (p x) -> squash q))
   : squash q
   = eliminate exists (x:t). p x
-    returns q
-    with pf_p. k x pf_p
+    with k x ()
 
-let exists_elim_alt (#t:Type) (#p:t -> Type) (#q:Type)
+let exists_elim_alt (#t:Type) (#p:t -> prop) (#q:prop)
                     (pf: squash (exists (x:t). p x))
                     (k : (x:t -> Lemma (requires p x)
                                       (ensures q)))
   : Lemma q
   = eliminate exists (x:t). p x
-    returns q
-    with pf_p. k x
+    with k x
 //SNIPPET_END: exists_elim$

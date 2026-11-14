@@ -1,0 +1,17 @@
+/* krml header omitted for test repeatability */
+
+
+#include "Custard.h"
+
+#include "internal/Prims.h"
+
+krml_checked_int_t ExtractPulseFnIface_pure_add(krml_checked_int_t x, krml_checked_int_t eta)
+{
+  return Prims_op_Addition(x, eta);
+}
+
+krml_checked_int_t ExtractPulseFnIface_pulse_read_ref(krml_checked_int_t *r)
+{
+  return *r;
+}
+

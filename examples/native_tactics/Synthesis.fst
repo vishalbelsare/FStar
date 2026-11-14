@@ -15,7 +15,7 @@
 *)
 module Synthesis
 
-open FStar.Tactics
+open FStar.Tactics.V2
 
 [@@plugin]
 let rec fib (n : int) : Tac unit =
@@ -23,7 +23,7 @@ let rec fib (n : int) : Tac unit =
     then
         exact (`1)
     else (
-        apply (`op_Addition);
+        apply (`op_Plus);
         iseq [ (fun () -> fib (n - 1)) ;
                (fun () -> fib (n - 2)) ]
     )
@@ -38,7 +38,7 @@ let rec fib_norm (n : int) : Tac unit =
         exact (`1)
     else (
         dup ();
-        apply (`op_Addition);
+        apply (`op_Plus);
         iseq [ (fun () -> fib_norm (n - 1)) ;
                (fun () -> fib_norm (n - 2)) ];
         norm [primops];

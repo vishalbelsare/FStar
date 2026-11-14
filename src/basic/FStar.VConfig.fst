@@ -15,5 +15,4 @@
 *)
 module FStar.VConfig
 
-open FStar.Compiler.Effect
-module List = FStar.Compiler.List
+(* This file here to trigger extraction. *)

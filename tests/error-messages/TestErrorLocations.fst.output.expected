@@ -1,0 +1,184 @@
+* Info at TestErrorLocations.fst(20,12-20,18):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - See also TestErrorLocations.fst(20,21-20,23)
+
+* Info at TestErrorLocations.fst(24,12-24,18):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - See also TestErrorLocations.fst(24,21-24,23)
+
+* Info at TestErrorLocations.fst(31,10-31,19):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: x >= 0
+  - In context: x: Prims.int
+  - See also TestErrorLocations.fst(27,50-27,58)
+
+* Info at TestErrorLocations.fst(37,10-37,11):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context:
+      uu___: Type
+      x: _
+      f: x: Prims.int -> Prims.int
+      TestErrorLocations.test2_aux == f
+  - See also TestErrorLocations.fst(27,50-27,58)
+
+* Info at TestErrorLocations.fst(43,20-43,21):
+  - Expected failure:
+  - Subtyping check failed
+  - Expected type Prims.nat got type Prims.int
+  - The SMT solver could not prove the query.
+  - Failed to prove: x >= 0
+  - In context: x: Prims.int
+  - See also Prims.fst(477,18-477,24)
+
+* Info at TestErrorLocations.fst(48,14-48,19):
+  - Expected failure:
+  - Subtyping check failed
+  - Expected type _: Prims.int{0 >= 0 /\ _ >= 0} got type Prims.int
+  - The SMT solver could not prove the query.
+  - Failed to prove: x + 1 >= 0
+  - In context:
+      x: Prims.int
+      x <> 0
+  - See also TestErrorLocations.fst(46,84-46,90)
+
+* Info at TestErrorLocations.fst(58,15-58,17):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context: uu___: Prims.unit
+  - See also TestErrorLocations.fst(56,27-56,29)
+
+* Info at TestErrorLocations.fst(62,15-62,17):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: Prims.l_False
+  - In context: uu___: Prims.unit
+  - See also TestErrorLocations.fst(60,25-60,30)
+
+* Info at TestErrorLocations.fst(66,27-66,28):
+  - Expected failure:
+  - Subtyping check failed
+  - Expected type Prims.nat got type Prims.int
+  - The SMT solver could not prove the query.
+  - Failed to prove: x >= 0
+  - In context: x: Prims.int
+  - See also Prims.fst(477,18-477,24)
+
+* Info at TestErrorLocations.fst(70,25-70,34):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: x >= 0
+  - In context: x: Prims.int
+  - See also TestErrorLocations.fst(68,52-68,66)
+
+* Info at TestErrorLocations.fst(81,2-81,8):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: TestErrorLocations.p3
+  - In context:
+      TestErrorLocations.p1
+      TestErrorLocations.p1
+      TestErrorLocations.p2
+      TestErrorLocations.p2
+  - See also TestErrorLocations.fst(81,9-81,11)
+
+* Info at TestErrorLocations.fst(79,2-79,8):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: TestErrorLocations.p1
+  - See also TestErrorLocations.fst(79,9-79,11)
+
+* Info at TestErrorLocations.fst(89,19-89,36):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: exists (x1: Prims.nat). x1 = 0
+  - In context: uu___: Prims.unit
+  - See also FStar.Classical.Sugar.fsti(209,14-209,29)
+
+* Info at TestErrorLocations.fst(95,28-95,33):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: x = 0
+  - In context:
+      uu___: Prims.unit
+      x: Prims.nat
+
+* Info at TestErrorLocations.fst(100,17-100,18):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: q
+  - In context:
+      p: Prims.prop
+      q: Prims.prop
+      p
+  - See also TestErrorLocations.fst(99,21-99,22)
+
+* Info at TestErrorLocations.fst(100,12-100,13):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: p
+  - In context:
+      p: Prims.prop
+      q: Prims.prop
+  - See also TestErrorLocations.fst(99,19-99,20)
+
+* Info at TestErrorLocations.fst(105,17-105,18):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: q
+  - In context:
+      p: Prims.prop
+      q: Prims.prop
+      p
+      p
+  - See also TestErrorLocations.fst(104,21-104,22)
+
+* Info at TestErrorLocations.fst(110,12-110,18):
+  - Expected failure:
+  - Assertion failed
+  - The SMT solver could not prove the query.
+  - Failed to prove: p \/ q
+  - In context:
+      p: Prims.prop
+      q: Prims.prop
+  - See also FStar.Classical.Sugar.fsti(173,14-173,20)
+
+* Warning 240 at TestErrorLocations.fst(60,4-60,9):
+  - TestErrorLocations.test7 is declared but no definition was found
+  - Add an 'assume' if this is intentional
+
+* Warning 240 at TestErrorLocations.fst(56,4-56,9):
+  - TestErrorLocations.test6 is declared but no definition was found
+  - Add an 'assume' if this is intentional
+
+* Warning 240 at TestErrorLocations.fst(46,4-46,9):
+  - TestErrorLocations.test5 is declared but no definition was found
+  - Add an 'assume' if this is intentional
+
+* Warning 240 at TestErrorLocations.fst(109,0-112,13):
+  - Missing definitions in module TestErrorLocations:
+      test5
+      test6
+      test7
+

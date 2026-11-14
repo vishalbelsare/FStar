@@ -41,7 +41,7 @@ unfold
 let arrow (a: Type) (b: (a -> Type)) = x: a -> Tot (b x)
 
 (** Using [arrow] instead *)
-[@@ (deprecated "use arrow instead")]
+[@@ (deprecated "Use arrow instead")]
 let efun (a: Type) (b: (a -> Type)) = arrow a b
 
 (** feq #a #b f g: pointwise equality of [f] and [g] on domain [a] *)
@@ -70,8 +70,12 @@ let feq (#a: Type) (#b: (a -> Type)) (f g: arrow a b) = forall x. {:pattern (f x
         will be exercised as part of cross-module inlining across
         interface boundaries)
 *)
+(* [on_domain a f] is habitually applied to just [a] and [f] — [feq_on_domain]
+   below even has an SMT pattern on that partial application — so its arity must
+   not be read off its type, whose codomain is an arrow. *)
+[@@FStar.Attributes.smt_arity 3]
 inline_for_extraction
-val on_domain (a: Type) (#b: (a -> Type)) (f: arrow a b) : Tot (arrow a b)
+val on_domain (a: Type) (#b: (a -> Type)) ([@@@strictly_positive] f: arrow a b) : Tot (arrow a b)
 
 (** feq_on_domain:
      [on_domain a f] is pointwise equal to [f]
@@ -108,7 +112,7 @@ let restricted_t (a: Type) (b: (a -> Type)) = f: arrow a b {is_restricted a f}
       arrows.
  *)
 unfold
-let op_Hat_Subtraction_Greater (a b: Type) = restricted_t a (fun _ -> b)
+let ( ^-> ) (a b: Type) = restricted_t a (fun _ -> b)
 
 (** [on_dom a f]:
      A convenience function to introduce a restricted, dependent function
@@ -139,7 +143,7 @@ unfold
 let arrow_g (a: Type) (b: (a -> Type)) = x: a -> GTot (b x)
 
 (** Use [arrow_g] instead *)
-[@@ (deprecated "use arrow_g instead")]
+[@@ (deprecated "Use arrow_g instead")]
 let efun_g (a: Type) (b: (a -> Type)) = arrow_g a b
 
 (** [feq_g #a #b f g]: pointwise equality of [f] and [g] on domain [a] **)
@@ -147,6 +151,7 @@ let feq_g (#a: Type) (#b: (a -> Type)) (f g: arrow_g a b) =
   forall x. {:pattern (f x)\/(g x)} f x == g x
 
 (** The counterpart of [on_domain] for ghost functions *)
+[@@FStar.Attributes.smt_arity 3]
 val on_domain_g (a: Type) (#b: (a -> Type)) (f: arrow_g a b) : Tot (arrow_g a b)
 
 (** [on_domain_g a f] is pointwise equal to [f] *)
@@ -170,7 +175,7 @@ let restricted_g_t (a: Type) (b: (a -> Type)) = f: arrow_g a b {is_restricted_g 
       a to [b].
  *)
 unfold
-let op_Hat_Subtraction_Greater_Greater (a b: Type) = restricted_g_t a (fun _ -> b)
+let ( ^->> ) (a b: Type) = restricted_g_t a (fun _ -> b)
 
 (** [on_dom_g a f]:
      A convenience function to introduce a restricted, ghost, dependent function

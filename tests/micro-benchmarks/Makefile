@@ -1,37 +1,53 @@
-FSTAR_HOME=../..
+FSTAR_ROOT ?= ../..
+include $(FSTAR_ROOT)/mk/test.mk
 
-FSTAR_FILES=$(wildcard *.fst)
-# FSTAR_FILES+= Coercions1Phase.fst
+SUBDIRS += ns_resolution
 
-all: verify-all ns-resolution
+# These definitions agree with the erasability their interface declares, so
+# none of them may raise 318. The cases that do are in tests/interfaces.
+$(CACHE_DIR)/MustEraseForExtraction.fst.checked: FSTAR_ARGS += --warn_error @318
+FSTAR_ARGS += --warn_error +240
 
-ns-resolution:
-	+$(MAKE) -C ns_resolution
+# An implicit of arrow type must be normalized with its (opened) binders in
+# scope; --defensive error is what catches it if it is not.
+$(CACHE_DIR)/ImplicitArrowDefensive.fst.checked: FSTAR_ARGS += --defensive error
 
-include $(FSTAR_HOME)/examples/Makefile.common
+# `--ext freshen` restarts the solver before every top-level declaration.
+# ExtFreshen.fst is written so that each declaration depends on facts
+# introduced by the previous ones, so checking it with the option on tests
+# that the SMT context is properly replayed across the restarts.
+$(CACHE_DIR)/ExtFreshen.fst.checked: FSTAR_ARGS += --ext freshen
 
-verify-all: $(CACHE_DIR) $(addsuffix .checked, $(addprefix $(CACHE_DIR)/, $(FSTAR_FILES))) \
-            Erasable.ml-cmp \
-	    InlineForExtractionNormRequest.ml-cmp \
-	    MachineIntegerConstants.ml-cmp \
-            $(CACHE_DIR)/Coercions1Phase.fst.checked
+# And check that the restarts really do happen: --query_stats reports every
+# Z3 process it spawns, and there must be several of them when the option is
+# on but only one when it is off.
+all: $(OUTPUT_DIR)/ExtFreshen.restarts
 
-$(CACHE_DIR)/MustEraseForExtraction.fst.checked: OTHERFLAGS += --warn_error @318
+$(OUTPUT_DIR)/ExtFreshen.restarts: ExtFreshen.fst $(FSTAR_EXE)
+	$(call msg, "FRESHEN", $<)
+	$(Q)rm -rf $(OUTPUT_DIR)/freshen-on $(OUTPUT_DIR)/freshen-off
+	$(Q)mkdir -p $(OUTPUT_DIR)/freshen-on $(OUTPUT_DIR)/freshen-off
+	$(Q)$(FSTAR_EXE) $(SIL) --query_stats --ext freshen \
+	  --odir $(OUTPUT_DIR)/freshen-on --cache_dir $(OUTPUT_DIR)/freshen-on $< \
+	  > $(OUTPUT_DIR)/freshen-on.out 2>&1
+	$(Q)$(FSTAR_EXE) $(SIL) --query_stats \
+	  --odir $(OUTPUT_DIR)/freshen-off --cache_dir $(OUTPUT_DIR)/freshen-off $< \
+	  > $(OUTPUT_DIR)/freshen-off.out 2>&1
+	$(Q)on=$$(grep -c 'Creating new z3proc' $(OUTPUT_DIR)/freshen-on.out); \
+	  off=$$(grep -c 'Creating new z3proc' $(OUTPUT_DIR)/freshen-off.out); \
+	  if [ "$$off" -ne 1 ]; then \
+	    echo "ERROR: expected 1 Z3 process without --ext freshen, got $$off"; false; \
+	  fi; \
+	  if [ "$$on" -le "$$off" ]; then \
+	    echo "ERROR: --ext freshen did not restart Z3 ($$on processes, vs $$off without)"; false; \
+	  fi
+	$(Q)touch $@
 
-$(CACHE_DIR)/Coercions1Phase.fst.checked: OTHERFLAGS +=
-$(CACHE_DIR)/Coercions1Phase.fst.checked: Coercions1Phase.fst
-
-Coercions1Phase.fst: Coercions.fst
-	sed 's/module Coercions/module Coercions1Phase/' < $< > $@
-
-%.ml: %.fst
-	$(FSTAR) --codegen OCaml --extract $(subst .ml,, $@) $^
-
-%.ml-cmp: %.ml %.ml.expected
-	diff -u --strip-trailing-cr $< $<.expected
-
-
-clean:
-	rm -f .depend
-	rm -rf _cache
-	rm -rf _output
+# NestedMatchResTypePerf.fst nests twelve matches and checks instantly, but
+# only because the result type of a match no longer restates the term of every
+# branch. Without that, the module is 2^12 copies of its own body and the check
+# does not finish; the timeout is what makes the test a test.
+$(CACHE_DIR)/NestedMatchResTypePerf.fst.checked:
+	$(call msg, "CHECK", NestedMatchResTypePerf)
+	$(Q)timeout 120 $(FSTAR) -c NestedMatchResTypePerf.fst -o $@
+	touch -c $@

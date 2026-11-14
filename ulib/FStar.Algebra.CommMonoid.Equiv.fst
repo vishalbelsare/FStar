@@ -15,12 +15,11 @@
 *)
 module FStar.Algebra.CommMonoid.Equiv
 
-open FStar.Mul
 
 unopteq
 type equiv (a:Type) =
   | EQ :
-    eq:(a -> a -> Type0) -> 
+    eq:(a -> a -> prop) -> 
     reflexivity:(x:a -> Lemma (x `eq` x)) ->
     symmetry:(x:a -> y:a -> Lemma (requires (x `eq` y)) (ensures (y `eq` x))) ->
     transitivity:(x:a -> y:a -> z:a -> Lemma (requires (x `eq` y /\ y `eq` z)) (ensures (x `eq` z))) ->
@@ -37,11 +36,11 @@ let elim_eq_laws #a (eq:equiv a)
 
     introduce forall x y. x `eq.eq` y ==> y `eq.eq` x
     with (introduce _ ==> _
-          with _. eq.symmetry x y);
+          with eq.symmetry x y);
 
     introduce forall x y z. (x `eq.eq` y /\ y `eq.eq` z) ==> x `eq.eq` z
     with (introduce _ ==> _
-          with _. eq.transitivity x y z)
+          with eq.transitivity x y z)
 
 let equality_equiv (a:Type) : equiv a =
   EQ (fun x y -> x == y) (fun x -> ()) (fun x y -> ()) (fun x y z -> ())
